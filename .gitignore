@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+build/
+dist/
+
+# Env / secrets
+.env
+*.local
+azure-credentials.local.txt
+
+# Node / frontend
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# azd
+.azure/
+
+# Session audit artefacts
+fixes-*.png
+audit-*.png
+phase9-*.png
+*.pbit
+*.pbip
+report.pbit.zip
