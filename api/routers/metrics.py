@@ -130,6 +130,19 @@ async def get_chat_types(
     return await metrics.chat_types(session, filters=filters)
 
 
+@router.get("/breakdown")
+async def get_breakdown(
+    dim1: str = Query(default="app_name"),
+    dim2: str = Query(default="chat_type"),
+    filters: MetricFilters = Depends(get_filters),
+    session: AsyncSession = Depends(get_session),
+):
+    allowed = {"app_name", "chat_type", "conversation_location", "department", "office_location"}
+    if dim1 not in allowed or dim2 not in allowed:
+        return []
+    return await metrics.breakdown(session, dim1=dim1, dim2=dim2, filters=filters)
+
+
 @router.get("/categories")
 async def get_categories(session: AsyncSession = Depends(get_session)):
     return await metrics.categories(session)

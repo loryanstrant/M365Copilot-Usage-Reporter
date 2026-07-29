@@ -12,6 +12,15 @@ function fmt(value: string | null): string {
   }
 }
 
+function fmtDay(value: string | null): string {
+  if (!value) return "—";
+  try {
+    return new Date(value).toLocaleDateString();
+  } catch {
+    return value;
+  }
+}
+
 export default function AboutPage() {
   const [fresh, setFresh] = useState<Freshness | null>(null);
 
@@ -45,16 +54,18 @@ export default function AboutPage() {
         <h3 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
           Data freshness
         </h3>
-        {fresh?.last_run ? (
-          <dl className="grid gap-3 text-sm sm:grid-cols-2">
-            <Row label="Last job" value={fresh.last_run.job_name} />
-            <Row label="Status" value={fresh.last_run.status} />
-            <Row label="Started" value={fmt(fresh.last_run.started_at)} />
-            <Row label="Finished" value={fmt(fresh.last_run.finished_at)} />
-          </dl>
-        ) : (
-          <p className="text-sm text-slate-400">No ingestion has run yet.</p>
-        )}
+        <dl className="grid gap-3 text-sm sm:grid-cols-2">
+          <Row label="Earliest data" value={fmtDay(fresh?.earliest_prompt ?? null)} />
+          <Row label="Most recent data" value={fmtDay(fresh?.latest_prompt ?? null)} />
+          <Row
+            label="Last refreshed"
+            value={fresh?.last_run ? fmt(fresh.last_run.finished_at) : "—"}
+          />
+          <Row
+            label="Refresh status"
+            value={fresh?.last_run?.status ?? "No refresh yet"}
+          />
+        </dl>
       </div>
 
       <div className="card p-6 text-sm leading-relaxed text-slate-600 dark:text-slate-300">

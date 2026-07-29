@@ -37,3 +37,6 @@ phase9-*.png
 *.pbit
 *.pbip
 report.pbit.zip
+
+debug-*.png
+backfill-page.png

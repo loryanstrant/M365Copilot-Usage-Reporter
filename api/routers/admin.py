@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends
 from sqlalchemy import func, select
@@ -24,7 +25,7 @@ from api.schemas import (
 )
 from shared.crypto import encrypt
 from shared.db import SessionLocal, get_session
-from shared.models import AppConfig, EntraUser, JobRun, LicensedUser, Prompt
+from shared.models import AppConfig, EntraUser, IngestState, JobRun, LicensedUser, Prompt
 from worker.backfill import (
     get_progress,
     is_running as backfill_running,
@@ -52,6 +53,7 @@ def _to_out(cfg: AppConfig | None) -> AppConfigOut:
         report_access_group_id=cfg.report_access_group_id,
         backfill_days=cfg.backfill_days,
         schedule_cron=cfg.schedule_cron,
+        schedule_interval_hours=cfg.schedule_interval_hours or 24,
         configured=bool(
             cfg.tenant_id and cfg.client_id and cfg.client_secret_encrypted
         ),
@@ -95,6 +97,8 @@ async def put_config(
         cfg.backfill_days = body.backfill_days
     if body.schedule_cron is not None:
         cfg.schedule_cron = body.schedule_cron.strip() or None
+    if body.schedule_interval_hours is not None:
+        cfg.schedule_interval_hours = max(1, min(body.schedule_interval_hours, 24))
     cfg.updated_by = user.username
 
     await session.commit()
@@ -159,6 +163,64 @@ async def backfill_progress() -> dict:
 async def backfill_cancel() -> IngestRunOut:
     request_cancel()
     return IngestRunOut(status="cancelling", detail="Backfill cancellation requested.")
+
+
+@router.get("/backfill/history")
+async def backfill_history(
+    session: AsyncSession = Depends(get_session),
+) -> list[dict]:
+    """Past historical-backfill runs, most recent first (for the audit table)."""
+    rows = (
+        await session.execute(
+            select(JobRun)
+            .where(JobRun.job_name == "backfill")
+            .order_by(JobRun.started_at.desc())
+            .limit(25)
+        )
+    ).scalars().all()
+    return [
+        {
+            "id": r.id,
+            "status": r.status,
+            "started_at": r.started_at.isoformat() if r.started_at else None,
+            "finished_at": r.finished_at.isoformat() if r.finished_at else None,
+            "stats": r.stats,
+        }
+        for r in rows
+    ]
+
+
+@router.get("/backfill/coverage")
+async def backfill_coverage(session: AsyncSession = Depends(get_session)) -> dict:
+    """How much history is already stored — used to discourage needless re-runs.
+
+    ``earliest_covered`` is the oldest per-user backfill boundary; ``lookback_days``
+    is how far back that reaches from today.
+    """
+    earliest = await session.scalar(
+        select(func.min(IngestState.watermark)).where(
+            IngestState.key.like("backfillstart:%")
+        )
+    )
+    earliest_prompt = await session.scalar(select(func.min(Prompt.prompt_date)))
+    total_prompts = await session.scalar(select(func.count()).select_from(Prompt)) or 0
+    last = await session.scalar(
+        select(JobRun)
+        .where(JobRun.job_name == "backfill")
+        .order_by(JobRun.started_at.desc())
+        .limit(1)
+    )
+    lookback_days = None
+    if earliest is not None:
+        lookback_days = (datetime.now(timezone.utc) - earliest).days
+    return {
+        "earliest_covered": earliest.isoformat() if earliest else None,
+        "earliest_prompt": earliest_prompt.isoformat() if earliest_prompt else None,
+        "lookback_days": lookback_days,
+        "total_prompts": total_prompts,
+        "has_run": last is not None,
+        "last_run_at": last.started_at.isoformat() if last and last.started_at else None,
+    }
 
 
 @router.get("/status", response_model=StatusOut)

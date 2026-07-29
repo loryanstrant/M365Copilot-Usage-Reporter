@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import {
+  Area,
+  AreaChart,
   CartesianGrid,
-  Line,
-  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -49,16 +49,30 @@ export default function LicensesPage() {
             No license history yet.
           </div>
         ) : (
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={points} margin={{ left: -20, right: 8, top: 8 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.4} />
+          <ResponsiveContainer width="100%" height={320}>
+            <AreaChart data={points} margin={{ left: -20, right: 8, top: 8 }}>
+              <defs>
+                <linearGradient id="licEnabled" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#2f5ae0" stopOpacity={0.35} />
+                  <stop offset="100%" stopColor="#2f5ae0" stopOpacity={0.02} />
+                </linearGradient>
+                <linearGradient id="licAllocated" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.35} />
+                  <stop offset="100%" stopColor="#f59e0b" stopOpacity={0.02} />
+                </linearGradient>
+                <linearGradient id="licAvailable" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#10b981" stopOpacity={0.35} />
+                  <stop offset="100%" stopColor="#10b981" stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.35} />
               <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="#94a3b8" />
               <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" allowDecimals={false} />
               <Tooltip />
-              <Line type="monotone" dataKey="enabled" stroke="#2f5ae0" strokeWidth={2} />
-              <Line type="monotone" dataKey="allocated" stroke="#f59e0b" strokeWidth={2} />
-              <Line type="monotone" dataKey="available" stroke="#10b981" strokeWidth={2} />
-            </LineChart>
+              <Area type="monotone" dataKey="enabled" stroke="#2f5ae0" strokeWidth={2.5} fill="url(#licEnabled)" />
+              <Area type="monotone" dataKey="allocated" stroke="#f59e0b" strokeWidth={2.5} fill="url(#licAllocated)" />
+              <Area type="monotone" dataKey="available" stroke="#10b981" strokeWidth={2.5} fill="url(#licAvailable)" />
+            </AreaChart>
           </ResponsiveContainer>
         )}
       </ChartCard>

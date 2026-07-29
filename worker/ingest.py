@@ -39,6 +39,11 @@ from worker.transforms import (
 
 logger = logging.getLogger("worker.ingest")
 
+# Look-back window applied the first time a scheduled/incremental run sees a
+# user (before any watermark exists). Deliberately short: deep history is the
+# job of the dedicated historical backfill.
+_INITIAL_INGEST_HOURS = 24
+
 _PROMPT_UPDATE_KEYS = [
     "user_id",
     "conversation_id",
@@ -158,7 +163,10 @@ async def sync_prompts(
         uid for (uid,) in (await session.execute(select(LicensedUser.user_id))).all()
     ]
     watermarks = await _load_watermarks(session)
-    default_since = now - timedelta(days=config.backfill_days)
+    # A scheduled/incremental run only ever looks back a short window on first
+    # sight of a user (the last 24 hours). Deep history is the job of the
+    # dedicated historical backfill, not the recurring ingest.
+    default_since = now - timedelta(hours=_INITIAL_INGEST_HOURS)
     sem = asyncio.Semaphore(settings.ingest_concurrency)
 
     async def fetch(uid: str) -> tuple[str, list[dict[str, Any]]]:
