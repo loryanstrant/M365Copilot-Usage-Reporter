@@ -12,10 +12,11 @@ import { api } from "../api/client";
 import { downloadCsv } from "../api/csv";
 import type { AppRow, BreakdownRow, CategoryRow, UserRow } from "../api/types";
 import ChartCard from "../components/ChartCard";
-import { ChartGradients, barGradId } from "../components/chartTheme";
+import { barGradId } from "../components/chartTheme";
 import EChart from "../components/EChart";
 import FilterBar from "../components/FilterBar";
 import { filterDeps, metricsQuery, useFilters } from "../filters/FiltersContext";
+import { useTheme } from "../theme/ThemeContext";
 
 const RADAR_COLORS = ["#2f5ae0", "#22c55e", "#f59e0b", "#a855f7", "#ef4444", "#06b6d4"];
 
@@ -25,6 +26,7 @@ function fmtDate(value: string | null): string {
 
 export default function UsagePage() {
   const filters = useFilters();
+  const { theme } = useTheme();
   const [apps, setApps] = useState<AppRow[]>([]);
   const [users, setUsers] = useState<UserRow[]>([]);
   const [categories, setCategories] = useState<CategoryRow[]>([]);
@@ -56,6 +58,8 @@ export default function UsagePage() {
 
   // Radar: usage profile of the top apps across departments.
   const radarOption = useMemo(() => {
+    const nameColor = theme === "dark" ? "#cbd5e1" : "#475569";
+    const gridColor = theme === "dark" ? "rgba(148,163,184,0.25)" : "rgba(100,116,139,0.25)";
     const apps = [...new Set(radar.map((r) => r.d2 ?? "Unknown"))].slice(0, 6);
     const depts = [...new Set(radar.map((r) => r.d1 ?? "Unknown"))].slice(0, 5);
     const lookup = new Map(radar.map((r) => [`${r.d1}|${r.d2}`, r.prompts]));
@@ -64,11 +68,14 @@ export default function UsagePage() {
     );
     return {
       tooltip: {},
-      legend: { bottom: 0, textStyle: { fontSize: 11 } },
+      legend: { bottom: 0, textStyle: { fontSize: 11, color: nameColor } },
       radar: {
         indicator: apps.map((app, i) => ({ name: app, max: maxByApp[i] })),
         radius: "62%",
-        splitArea: { areaStyle: { opacity: 0.04 } },
+        axisName: { color: nameColor, fontSize: 11 },
+        splitLine: { lineStyle: { color: gridColor } },
+        axisLine: { lineStyle: { color: gridColor } },
+        splitArea: { areaStyle: { opacity: theme === "dark" ? 0.03 : 0.05 } },
       },
       series: [
         {
@@ -84,7 +91,7 @@ export default function UsagePage() {
         },
       ],
     } as echarts.EChartsOption;
-  }, [radar]);
+  }, [radar, theme]);
 
   function exportApps() {
     downloadCsv(
@@ -134,7 +141,6 @@ export default function UsagePage() {
         >
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={categories} margin={{ left: -20, right: 8, top: 8 }}>
-              <ChartGradients />
               <XAxis dataKey="category" tick={{ fontSize: 11 }} stroke="#94a3b8" />
               <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" allowDecimals={false} />
               <Tooltip cursor={{ fill: "rgba(59,110,245,0.06)" }} />

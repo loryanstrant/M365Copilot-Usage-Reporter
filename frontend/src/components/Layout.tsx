@@ -2,6 +2,7 @@ import { type ReactNode } from "react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 import { useTheme } from "../theme/ThemeContext";
+import SvgDefs from "./SvgDefs";
 
 function navClass({ isActive }: { isActive: boolean }): string {
   return [
@@ -18,6 +19,7 @@ export default function Layout({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex h-full">
+      <SvgDefs />
       <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
         <div className="flex items-center gap-3 px-5 py-5">
           <img src="/copilot-logo.png" alt="Copilot" className="h-8 w-8 shrink-0" />

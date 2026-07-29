@@ -22,7 +22,7 @@ import type {
   NamedCount,
 } from "../api/types";
 import ChartCard from "../components/ChartCard";
-import { CHART_COLORS, ChartGradients, barGradId, gradId } from "../components/chartTheme";
+import { CHART_COLORS, barGradId, gradId } from "../components/chartTheme";
 import FilterBar from "../components/FilterBar";
 import KpiCard from "../components/KpiCard";
 import { filterDeps, metricsQuery, useFilters } from "../filters/FiltersContext";
@@ -138,7 +138,6 @@ export default function OverviewPage() {
         >
           <ResponsiveContainer width="100%" height={260}>
             <AreaChart data={daily} margin={{ left: -20, right: 8, top: 8 }}>
-              <ChartGradients />
               <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="#94a3b8" tickMargin={8} />
               <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" allowDecimals={false} />
               <Tooltip />
@@ -200,7 +199,6 @@ export default function OverviewPage() {
         <ChartCard title="Usage by app" subtitle="Prompts per surface">
           <ResponsiveContainer width="100%" height={240}>
             <BarChart data={apps} margin={{ left: -20, right: 8, top: 8 }}>
-              <ChartGradients />
               <XAxis dataKey="app_name" tick={{ fontSize: 10 }} stroke="#94a3b8" interval={0} angle={-30} textAnchor="end" height={60} />
               <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" allowDecimals={false} />
               <Tooltip />
