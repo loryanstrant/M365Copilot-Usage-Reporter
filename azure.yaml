@@ -1,0 +1,21 @@
+# azd manifest — deploys the API (web) and worker to Azure Container Apps.
+# Both services build from the same Dockerfile using different targets.
+name: copilot-usage-reporter
+metadata:
+  template: copilot-usage-reporter@0.1.0
+
+services:
+  api:
+    project: .
+    language: docker
+    host: containerapp
+    docker:
+      path: ./Dockerfile
+      target: api
+  worker:
+    project: .
+    language: docker
+    host: containerapp
+    docker:
+      path: ./Dockerfile
+      target: worker
