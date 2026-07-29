@@ -132,6 +132,9 @@ class AppConfig(Base):
     report_access_group_id: Mapped[str | None] = mapped_column(Text)
     backfill_days: Mapped[int] = mapped_column(Integer, default=30)
     schedule_cron: Mapped[str | None] = mapped_column(Text)
+    # Friendly schedule: run the incremental ingest every N hours (1..24).
+    # 24 = once a day. Replaces the cron field for non-technical admins.
+    schedule_interval_hours: Mapped[int] = mapped_column(Integer, default=24)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

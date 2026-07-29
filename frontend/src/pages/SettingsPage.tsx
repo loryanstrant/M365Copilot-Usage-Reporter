@@ -1,14 +1,23 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { api, ApiError } from "../api/client";
 import type {
   AppConfig,
-  BackfillProgress,
   IngestRunResult,
   StatusResult,
   TestConnectionResult,
 } from "../api/types";
 
 const DEFAULT_SKU = "639dec6b-bb19-468b-871c-c5c441c4b0cb";
+
+// Friendly cadence presets → hours. Never less often than daily (24h).
+const SCHEDULE_OPTIONS = [
+  { hours: 24, label: "Once a day" },
+  { hours: 12, label: "Every 12 hours" },
+  { hours: 6, label: "Every 6 hours" },
+  { hours: 3, label: "Every 3 hours" },
+  { hours: 1, label: "Every hour" },
+];
 
 interface Banner {
   kind: "ok" | "error" | "info";
@@ -17,9 +26,9 @@ interface Banner {
 
 function bannerClass(kind: Banner["kind"]): string {
   return {
-    ok: "bg-green-50 text-green-700",
-    error: "bg-red-50 text-red-700",
-    info: "bg-brand-50 text-brand-700",
+    ok: "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400",
+    error: "bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400",
+    info: "bg-brand-50 text-brand-700 dark:bg-brand-900/20 dark:text-brand-400",
   }[kind];
 }
 
@@ -37,60 +46,15 @@ export default function SettingsPage() {
   const [clientSecret, setClientSecret] = useState("");
   const [hasSecret, setHasSecret] = useState(false);
   const [skuIds, setSkuIds] = useState(DEFAULT_SKU);
-  const [backfillDays, setBackfillDays] = useState(30);
-  const [scheduleCron, setScheduleCron] = useState("");
+  const [scheduleHours, setScheduleHours] = useState(24);
   const [groupId, setGroupId] = useState("");
-
-  const [backfillLookback, setBackfillLookback] = useState(90);
-  const [backfill, setBackfill] = useState<BackfillProgress | null>(null);
-
-  async function refreshBackfill() {
-    try {
-      setBackfill(await api<BackfillProgress>("/admin/backfill/progress"));
-    } catch {
-      /* ignore */
-    }
-  }
-
-  useEffect(() => {
-    refreshBackfill();
-    const timer = setInterval(refreshBackfill, 3000);
-    return () => clearInterval(timer);
-  }, []);
-
-  async function onRunBackfill() {
-    setBanner(null);
-    try {
-      const res = await api<IngestRunResult>(
-        `/admin/backfill/run?lookback_days=${backfillLookback}`,
-        { method: "POST" },
-      );
-      setBanner({ kind: "info", text: res.detail });
-      await refreshBackfill();
-    } catch (err) {
-      setBanner({
-        kind: "error",
-        text: err instanceof ApiError ? err.message : "Backfill failed to start",
-      });
-    }
-  }
-
-  async function onCancelBackfill() {
-    try {
-      await api<IngestRunResult>("/admin/backfill/cancel", { method: "POST" });
-      await refreshBackfill();
-    } catch {
-      /* ignore */
-    }
-  }
 
   function applyConfig(cfg: AppConfig) {
     setTenantId(cfg.tenant_id ?? "");
     setClientId(cfg.client_id ?? "");
     setHasSecret(cfg.has_client_secret);
     setSkuIds((cfg.copilot_sku_ids ?? []).join(", ") || DEFAULT_SKU);
-    setBackfillDays(cfg.backfill_days ?? 30);
-    setScheduleCron(cfg.schedule_cron ?? "");
+    setScheduleHours(cfg.schedule_interval_hours ?? 24);
     setGroupId(cfg.report_access_group_id ?? "");
   }
 
@@ -126,12 +90,8 @@ export default function SettingsPage() {
       const payload: Record<string, unknown> = {
         tenant_id: tenantId,
         client_id: clientId,
-        copilot_sku_ids: skuIds
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean),
-        backfill_days: backfillDays,
-        schedule_cron: scheduleCron,
+        copilot_sku_ids: skuIds.split(",").map((s) => s.trim()).filter(Boolean),
+        schedule_interval_hours: scheduleHours,
         report_access_group_id: groupId,
       };
       if (clientSecret) payload.client_secret = clientSecret;
@@ -183,7 +143,6 @@ export default function SettingsPage() {
     try {
       const res = await api<IngestRunResult>("/admin/ingest/run", { method: "POST" });
       setBanner({ kind: "info", text: res.detail });
-      // Poll status a handful of times so the counters move without a refresh.
       let ticks = 0;
       const timer = setInterval(async () => {
         ticks += 1;
@@ -200,17 +159,15 @@ export default function SettingsPage() {
     }
   }
 
-  if (loading) {
-    return <div className="text-slate-500">Loading settings…</div>;
-  }
+  if (loading) return <div className="text-slate-500">Loading settings…</div>;
 
   return (
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold">Settings</h1>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Connect Microsoft Graph and run ingestion. The client secret is stored
-          encrypted and never shown again.
+          Connect Microsoft Graph and choose how often data refreshes. The client
+          secret is stored encrypted and never shown again.
         </p>
       </div>
 
@@ -221,10 +178,7 @@ export default function SettingsPage() {
       )}
 
       <div className="grid gap-8 lg:grid-cols-3">
-        <form
-          onSubmit={onSave}
-          className="card space-y-5 p-6 lg:col-span-2"
-        >
+        <form onSubmit={onSave} className="card space-y-5 p-6 lg:col-span-2">
           <h2 className="text-lg font-semibold">Microsoft Graph</h2>
 
           <Field label="Tenant ID">
@@ -232,7 +186,7 @@ export default function SettingsPage() {
               value={tenantId}
               onChange={(e) => setTenantId(e.target.value)}
               placeholder="00000000-0000-0000-0000-000000000000"
-              className={inputClass}
+              className="input"
             />
           </Field>
 
@@ -241,7 +195,7 @@ export default function SettingsPage() {
               value={clientId}
               onChange={(e) => setClientId(e.target.value)}
               placeholder="00000000-0000-0000-0000-000000000000"
-              className={inputClass}
+              className="input"
             />
           </Field>
 
@@ -258,7 +212,7 @@ export default function SettingsPage() {
               value={clientSecret}
               onChange={(e) => setClientSecret(e.target.value)}
               placeholder={hasSecret ? "•••••••• (unchanged)" : "Enter secret value"}
-              className={inputClass}
+              className="input"
             />
           </Field>
 
@@ -269,30 +223,26 @@ export default function SettingsPage() {
             <input
               value={skuIds}
               onChange={(e) => setSkuIds(e.target.value)}
-              className={inputClass}
+              className="input"
             />
           </Field>
 
-          <div className="grid gap-5 sm:grid-cols-2">
-            <Field label="Backfill days" hint="Lookback window on first run.">
-              <input
-                type="number"
-                min={1}
-                max={3650}
-                value={backfillDays}
-                onChange={(e) => setBackfillDays(Number(e.target.value))}
-                className={inputClass}
-              />
-            </Field>
-            <Field label="Schedule (cron)" hint="Optional. Worker default: 0 2 * * *">
-              <input
-                value={scheduleCron}
-                onChange={(e) => setScheduleCron(e.target.value)}
-                placeholder="0 2 * * *"
-                className={inputClass}
-              />
-            </Field>
-          </div>
+          <Field
+            label="Refresh frequency"
+            hint="How often the report pulls new usage. The first pull for each person covers the last 24 hours; after that it stays up to date automatically."
+          >
+            <select
+              value={scheduleHours}
+              onChange={(e) => setScheduleHours(Number(e.target.value))}
+              className="input w-full sm:w-64"
+            >
+              {SCHEDULE_OPTIONS.map((o) => (
+                <option key={o.hours} value={o.hours}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </Field>
 
           <Field
             label="Report access group ID"
@@ -301,33 +251,24 @@ export default function SettingsPage() {
             <input
               value={groupId}
               onChange={(e) => setGroupId(e.target.value)}
-              className={inputClass}
+              className="input"
             />
           </Field>
 
           <div className="flex flex-wrap gap-3 pt-2">
-            <button
-              type="submit"
-              disabled={saving}
-              className="btn-primary"
-            >
+            <button type="submit" disabled={saving} className="btn-primary">
               {saving ? "Saving…" : "Save settings"}
             </button>
-            <button
-              type="button"
-              onClick={onTest}
-              disabled={testing}
-              className="btn-secondary"
-            >
+            <button type="button" onClick={onTest} disabled={testing} className="btn-secondary">
               {testing ? "Testing…" : "Test connection"}
             </button>
             <button
               type="button"
               onClick={onRunIngest}
               disabled={ingesting}
-              className="rounded-lg border border-brand-300 bg-brand-50 px-4 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-100 disabled:opacity-60"
+              className="rounded-lg border border-brand-300 bg-brand-50 px-4 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-100 disabled:opacity-60 dark:border-brand-700 dark:bg-brand-900/20 dark:text-brand-400"
             >
-              {ingesting ? "Starting…" : "Run ingest now"}
+              {ingesting ? "Starting…" : "Refresh now"}
             </button>
           </div>
         </form>
@@ -344,13 +285,13 @@ export default function SettingsPage() {
                 <CheckRow ok={test.directory_read} label="Directory read" />
               </ul>
               {test.copilot_licensed_users != null && (
-                <div className="mt-3 text-sm text-slate-600">
+                <div className="mt-3 text-sm text-slate-600 dark:text-slate-300">
                   Copilot-licensed users:{" "}
                   <span className="font-semibold">{test.copilot_licensed_users}</span>
                 </div>
               )}
               {test.detail && (
-                <div className="mt-3 rounded bg-slate-50 p-2 text-xs text-slate-500">
+                <div className="mt-3 rounded bg-slate-50 p-2 text-xs text-slate-500 dark:bg-slate-900">
                   {test.detail}
                 </div>
               )}
@@ -358,7 +299,9 @@ export default function SettingsPage() {
           )}
 
           <div className="card p-6">
-            <h3 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">Data status</h3>
+            <h3 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
+              Data status
+            </h3>
             <dl className="space-y-2 text-sm">
               <StatRow label="Configured" value={status?.configured ? "Yes" : "No"} />
               <StatRow label="Prompts" value={status?.prompts ?? 0} />
@@ -367,7 +310,7 @@ export default function SettingsPage() {
               <StatRow label="Directory users" value={status?.entra_users ?? 0} />
             </dl>
             {status?.last_run && (
-              <div className="mt-4 border-t border-slate-100 pt-3 text-xs text-slate-500">
+              <div className="mt-4 border-t border-slate-100 pt-3 text-xs text-slate-500 dark:border-slate-700">
                 Last run: <span className="font-medium">{status.last_run.job_name}</span>{" "}
                 — {status.last_run.status}
               </div>
@@ -375,80 +318,25 @@ export default function SettingsPage() {
           </div>
 
           <div className="card p-6">
-            <h3 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
+            <h3 className="mb-1 text-sm font-semibold text-slate-700 dark:text-slate-200">
               Historical backfill
             </h3>
-            <p className="mb-3 text-xs text-slate-400">
-              Pull older history in resumable time windows. Safe to re-run.
+            <p className="mb-4 text-xs text-slate-400 dark:text-slate-500">
+              Load older history in one intelligent, resumable pass — with a record
+              of what's already been imported.
             </p>
-            <div className="flex items-end gap-3">
-              <div className="flex-1">
-                <label className="mb-1 block text-xs font-medium text-slate-600">
-                  Lookback days
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  max={3650}
-                  value={backfillLookback}
-                  onChange={(e) => setBackfillLookback(Number(e.target.value))}
-                  className={inputClass}
-                />
-              </div>
-            </div>
-            <div className="mt-3 flex gap-2">
-              <button
-                type="button"
-                onClick={onRunBackfill}
-                disabled={backfill?.status === "running"}
-                className="rounded-lg border border-brand-300 bg-brand-50 px-3 py-1.5 text-sm font-semibold text-brand-700 hover:bg-brand-100 disabled:opacity-60 dark:border-brand-700 dark:bg-brand-700/20 dark:text-brand-500 dark:hover:bg-brand-700/30"
-              >
-                Run backfill
-              </button>
-              {backfill?.status === "running" && (
-                <button
-                  type="button"
-                  onClick={onCancelBackfill}
-                  className="btn-secondary px-3 py-1.5"
-                >
-                  Cancel
-                </button>
-              )}
-            </div>
-            {backfill && backfill.status !== "idle" && (
-              <div className="mt-4 space-y-2 border-t border-slate-100 pt-3 text-xs text-slate-500">
-                <div className="flex justify-between">
-                  <span>Status</span>
-                  <span className="font-semibold text-slate-700">{backfill.status}</span>
-                </div>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
-                  <div
-                    className="h-full rounded-full bg-brand-500 transition-all"
-                    style={{
-                      width: `${
-                        backfill.users_total
-                          ? Math.round((backfill.users_done / backfill.users_total) * 100)
-                          : 0
-                      }%`,
-                    }}
-                  />
-                </div>
-                <div className="flex justify-between">
-                  <span>
-                    {backfill.users_done}/{backfill.users_total} users
-                  </span>
-                  <span>{backfill.prompts} prompts</span>
-                </div>
-              </div>
-            )}
+            <Link
+              to="/backfill"
+              className="inline-flex items-center gap-1 rounded-lg border border-brand-300 bg-brand-50 px-4 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-100 dark:border-brand-700 dark:bg-brand-900/20 dark:text-brand-400"
+            >
+              Open historical backfill →
+            </Link>
           </div>
         </div>
       </div>
     </div>
   );
 }
-
-const inputClass = "input";
 
 function Field({
   label,
@@ -461,7 +349,9 @@ function Field({
 }) {
   return (
     <div>
-      <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">{label}</label>
+      <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+        {label}
+      </label>
       {children}
       {hint && <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">{hint}</p>}
     </div>
@@ -472,7 +362,7 @@ function CheckRow({ ok, label }: { ok: boolean; label: string }) {
   return (
     <li className="flex items-center gap-2">
       <span className={ok ? "text-green-600" : "text-slate-300"}>{ok ? "✓" : "○"}</span>
-      <span className="text-slate-600">{label}</span>
+      <span className="text-slate-600 dark:text-slate-300">{label}</span>
     </li>
   );
 }

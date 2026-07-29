@@ -557,6 +557,73 @@ async def filter_options(session: AsyncSession) -> dict[str, Any]:
     }
 
 
+async def breakdown(
+    session: AsyncSession,
+    *,
+    dim1: str,
+    dim2: str,
+    filters: MetricFilters | None = None,
+    limit1: int = 8,
+    limit2: int = 8,
+) -> list[dict[str, Any]]:
+    """Prompt counts grouped by two dimensions (for sunburst / radar).
+
+    ``dim1``/``dim2`` are one of: app_name, chat_type, conversation_location
+    (from prompts) or department, office_location (from entra_users). Returns
+    rows ``{d1, d2, prompts}`` limited to the top ``limit1`` d1 values.
+    """
+    cols = {
+        "app_name": Prompt.app_name,
+        "chat_type": Prompt.chat_type,
+        "conversation_location": Prompt.conversation_location,
+        "department": EntraUser.department,
+        "office_location": EntraUser.office_location,
+    }
+    c1, c2 = cols[dim1], cols[dim2]
+    f = filters or MetricFilters()
+    join_user = dim1 in ("department", "office_location") or dim2 in (
+        "department",
+        "office_location",
+    )
+    q = (
+        _prompt_query(
+            f,
+            c1.label("d1"),
+            c2.label("d2"),
+            func.count().label("prompts"),
+            join_user=join_user,
+        )
+        .where(c1.is_not(None), c2.is_not(None))
+        .group_by(c1, c2)
+        .order_by(func.count().desc())
+    )
+    rows = [
+        {"d1": r.d1, "d2": r.d2, "prompts": r.prompts}
+        for r in (await session.execute(q)).all()
+    ]
+    # Keep only the top d1 values so the visual stays readable.
+    top1 = [
+        name
+        for name, _ in sorted(
+            _sum_by(rows, "d1").items(), key=lambda kv: kv[1], reverse=True
+        )[:limit1]
+    ]
+    top2 = [
+        name
+        for name, _ in sorted(
+            _sum_by(rows, "d2").items(), key=lambda kv: kv[1], reverse=True
+        )[:limit2]
+    ]
+    return [r for r in rows if r["d1"] in top1 and r["d2"] in top2]
+
+
+def _sum_by(rows: list[dict[str, Any]], key: str) -> dict[Any, int]:
+    out: dict[Any, int] = {}
+    for r in rows:
+        out[r[key]] = out.get(r[key], 0) + r["prompts"]
+    return out
+
+
 async def licenses(session: AsyncSession) -> list[dict[str, Any]]:
     """License totals over time (enabled / allocated / available)."""
     q = (

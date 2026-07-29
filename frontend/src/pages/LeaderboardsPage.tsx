@@ -12,10 +12,9 @@ import { api } from "../api/client";
 import { downloadCsv } from "../api/csv";
 import type { LeaderboardRollups, UserRow } from "../api/types";
 import ChartCard from "../components/ChartCard";
+import { ChartGradients, barGradId } from "../components/chartTheme";
 import FilterBar from "../components/FilterBar";
 import { filterDeps, metricsQuery, useFilters } from "../filters/FiltersContext";
-
-const BAR = "#3b6ef5";
 
 export default function LeaderboardsPage() {
   const filters = useFilters();
@@ -100,12 +99,13 @@ function RollupBar({
     <ChartCard title={title} subtitle="Prompts">
       <ResponsiveContainer width="100%" height={230}>
         <BarChart data={data} layout="vertical" margin={{ left: 10, right: 12, top: 4 }}>
+          <ChartGradients />
           <XAxis type="number" tick={{ fontSize: 11 }} stroke="#94a3b8" allowDecimals={false} />
           <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} stroke="#94a3b8" width={110} />
-          <Tooltip />
-          <Bar dataKey="prompts" radius={[0, 4, 4, 0]}>
+          <Tooltip cursor={{ fill: "rgba(59,110,245,0.06)" }} />
+          <Bar dataKey="prompts" radius={[0, 6, 6, 0]} fill={`url(#${barGradId(0)})`}>
             {data.map((_, i) => (
-              <Cell key={i} fill={BAR} />
+              <Cell key={i} fill={`url(#${barGradId(0)})`} />
             ))}
           </Bar>
         </BarChart>

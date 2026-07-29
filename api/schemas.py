@@ -35,6 +35,8 @@ class AppConfigIn(BaseModel):
     report_access_group_id: str | None = None
     backfill_days: int | None = Field(default=None, ge=1, le=3650)
     schedule_cron: str | None = None
+    # Friendly recurring-ingest cadence: run every N hours (1..24; 24 = daily).
+    schedule_interval_hours: int | None = Field(default=None, ge=1, le=24)
 
 
 class AppConfigOut(BaseModel):
@@ -45,6 +47,7 @@ class AppConfigOut(BaseModel):
     report_access_group_id: str | None = None
     backfill_days: int = 30
     schedule_cron: str | None = None
+    schedule_interval_hours: int = 24
     configured: bool = False
     updated_at: datetime | None = None
     updated_by: str | None = None

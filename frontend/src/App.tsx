@@ -3,6 +3,7 @@ import Layout from "./components/Layout";
 import { useAuth } from "./auth/AuthContext";
 import { FiltersProvider } from "./filters/FiltersContext";
 import AboutPage from "./pages/AboutPage";
+import BackfillPage from "./pages/BackfillPage";
 import LaggardsPage from "./pages/LaggardsPage";
 import LeaderboardsPage from "./pages/LeaderboardsPage";
 import LicensesPage from "./pages/LicensesPage";
@@ -41,6 +42,10 @@ export default function App() {
           <Route
             path="/settings"
             element={user.role === "admin" ? <SettingsPage /> : <Navigate to="/" replace />}
+          />
+          <Route
+            path="/backfill"
+            element={user.role === "admin" ? <BackfillPage /> : <Navigate to="/" replace />}
           />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

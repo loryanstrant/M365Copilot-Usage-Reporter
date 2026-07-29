@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import type * as echarts from "echarts";
 import {
   Area,
   AreaChart,
@@ -14,8 +15,9 @@ import {
   YAxis,
 } from "recharts";
 import { api } from "../api/client";
-import type { LocationsData, NamedCount } from "../api/types";
+import type { BreakdownRow, LocationsData, NamedCount } from "../api/types";
 import ChartCard from "../components/ChartCard";
+import EChart from "../components/EChart";
 import FilterBar from "../components/FilterBar";
 import { filterDeps, metricsQuery, useFilters } from "../filters/FiltersContext";
 
@@ -24,11 +26,20 @@ const COLORS = ["#2f5ae0", "#22c55e", "#f59e0b", "#a855f7", "#ef4444", "#06b6d4"
 export default function LocationsPage() {
   const filters = useFilters();
   const [data, setData] = useState<LocationsData | null>(null);
+  const [sun, setSun] = useState<BreakdownRow[]>([]);
 
   useEffect(() => {
     (async () => {
       try {
-        setData(await api<LocationsData>(`/metrics/locations${metricsQuery(filters)}`));
+        const q = metricsQuery(filters);
+        const [d, s] = await Promise.all([
+          api<LocationsData>(`/metrics/locations${q}`),
+          api<BreakdownRow[]>(
+            `/metrics/breakdown${q ? q + "&" : "?"}dim1=app_name&dim2=chat_type`,
+          ),
+        ]);
+        setData(d);
+        setSun(s);
       } catch {
         /* ignore */
       }
@@ -52,6 +63,40 @@ export default function LocationsPage() {
       chatKeys: keys,
     };
   }, [data]);
+
+  // Build a two-level sunburst: app → chat type.
+  const sunOption = useMemo(() => {
+    const byApp = new Map<string, { name: string; value: number }[]>();
+    for (const r of sun) {
+      const app = r.d1 ?? "Unknown";
+      const arr = byApp.get(app) ?? [];
+      arr.push({ name: r.d2 ?? "Unknown", value: r.prompts });
+      byApp.set(app, arr);
+    }
+    const data = [...byApp.entries()].map(([name, children], i) => ({
+      name,
+      itemStyle: { color: COLORS[i % COLORS.length] },
+      children,
+    }));
+    return {
+      tooltip: { trigger: "item", formatter: "{b}: {c}" },
+      series: [
+        {
+          type: "sunburst",
+          radius: [0, "92%"],
+          data,
+          sort: undefined,
+          emphasis: { focus: "ancestor" },
+          levels: [
+            {},
+            { r0: "0%", r: "55%", label: { rotate: "tangential", fontSize: 11 } },
+            { r0: "55%", r: "80%", label: { fontSize: 10 } },
+          ],
+          itemStyle: { borderWidth: 2, borderColor: "rgba(255,255,255,0.25)" },
+        },
+      ],
+    } as echarts.EChartsOption;
+  }, [sun]);
 
   return (
     <div className="space-y-8">
@@ -87,8 +132,14 @@ export default function LocationsPage() {
       </ChartCard>
 
       <div className="grid gap-6 lg:grid-cols-2">
+        <ChartCard title="App → chat type" subtitle="How each surface breaks down (sunburst)">
+          {sun.length === 0 ? (
+            <div className="py-16 text-center text-sm text-slate-400">No data.</div>
+          ) : (
+            <EChart option={sunOption} height={340} />
+          )}
+        </ChartCard>
         <SplitPie title="Conversation location" subtitle="App vs Chat" rows={data?.conversation_locations ?? []} />
-        <SplitPie title="Chat types" subtitle="Work / Web / Temporary" rows={data?.chat_types ?? []} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -127,10 +178,16 @@ function LocBar({ title, rows }: { title: string; rows: NamedCount[] }) {
       ) : (
         <ResponsiveContainer width="100%" height={260}>
           <BarChart data={d} layout="vertical" margin={{ left: 10, right: 12, top: 4 }}>
+            <defs>
+              <linearGradient id="locBarGrad" x1="0" y1="0" x2="1" y2="0">
+                <stop offset="0%" stopColor="#2f5ae0" stopOpacity={0.55} />
+                <stop offset="100%" stopColor="#3b6ef5" stopOpacity={1} />
+              </linearGradient>
+            </defs>
             <XAxis type="number" tick={{ fontSize: 11 }} stroke="#94a3b8" allowDecimals={false} />
             <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} stroke="#94a3b8" width={140} />
-            <Tooltip />
-            <Bar dataKey="prompts" fill="#2f5ae0" radius={[0, 4, 4, 0]} />
+            <Tooltip cursor={{ fill: "rgba(59,110,245,0.06)" }} />
+            <Bar dataKey="prompts" fill="url(#locBarGrad)" radius={[0, 6, 6, 0]} />
           </BarChart>
         </ResponsiveContainer>
       )}

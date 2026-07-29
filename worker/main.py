@@ -1,27 +1,44 @@
 """Worker entrypoint.
 
-Runs the ingestion engine on a cron schedule via APScheduler. If Graph is not
-configured yet (no ``app_config`` row), scheduled runs log and skip until the
-admin saves credentials in the UI.
+Runs the incremental ingestion engine on a fixed interval read from
+``app_config.schedule_interval_hours`` (1..24; 24 = daily). A lightweight
+supervisor re-reads the config every few minutes so a schedule change made in
+the admin UI takes effect without restarting the container. If Graph is not
+configured yet, scheduled runs log and skip until the admin saves credentials.
 """
 from __future__ import annotations
 
 import asyncio
 import logging
-import os
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.interval import IntervalTrigger
+from sqlalchemy import select
 
 from shared.config import settings
 from shared.db import SessionLocal
+from shared.models import AppConfig
 from worker.ingest import IngestError, run_ingest
 
 logging.basicConfig(level=settings.log_level)
 logger = logging.getLogger("worker")
 
-# Default: daily at 02:00. Override with INGEST_CRON (5-field crontab).
-_DEFAULT_CRON = "0 2 * * *"
+_DEFAULT_INTERVAL_HOURS = 24
+_SUPERVISOR_MINUTES = 5
+
+
+def clamp_interval_hours(hours: int | None) -> int:
+    """Clamp the configured interval to 1..24 hours (never less than hourly,
+    never more than once a day)."""
+    if not hours or hours < 1:
+        return _DEFAULT_INTERVAL_HOURS
+    return min(hours, 24)
+
+
+async def load_interval_hours() -> int:
+    async with SessionLocal() as session:
+        cfg = await session.scalar(select(AppConfig).limit(1))
+        return clamp_interval_hours(cfg.schedule_interval_hours if cfg else None)
 
 
 async def scheduled_ingest() -> None:
@@ -35,21 +52,36 @@ async def scheduled_ingest() -> None:
 
 
 async def main() -> None:
-    cron = os.getenv("INGEST_CRON", _DEFAULT_CRON)
     scheduler = AsyncIOScheduler(timezone="UTC")
+    scheduler.start()
+    current: dict[str, int | None] = {"hours": None}
+
+    async def apply_schedule() -> None:
+        hours = await load_interval_hours()
+        if hours != current["hours"]:
+            current["hours"] = hours
+            scheduler.add_job(
+                scheduled_ingest,
+                IntervalTrigger(hours=hours),
+                id="ingest",
+                replace_existing=True,
+                max_instances=1,
+                coalesce=True,
+            )
+            logger.info("Ingest scheduled every %s hour(s).", hours)
+
+    await apply_schedule()
+    # Supervisor: re-check the configured interval periodically so UI changes
+    # are picked up without a container restart.
     scheduler.add_job(
-        scheduled_ingest,
-        CronTrigger.from_crontab(cron, timezone="UTC"),
-        id="ingest",
+        apply_schedule,
+        IntervalTrigger(minutes=_SUPERVISOR_MINUTES),
+        id="schedule-supervisor",
         max_instances=1,
         coalesce=True,
     )
-    scheduler.start()
-    logger.info(
-        "Worker started (env=%s); ingest scheduled with cron '%s' (UTC).",
-        settings.app_env,
-        cron,
-    )
+
+    logger.info("Worker started (env=%s).", settings.app_env)
     stop = asyncio.Event()
     try:
         await stop.wait()

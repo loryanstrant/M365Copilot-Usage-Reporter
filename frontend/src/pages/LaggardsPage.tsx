@@ -5,8 +5,6 @@ import { downloadCsv } from "../api/csv";
 import type { LaggardsData } from "../api/types";
 import ChartCard from "../components/ChartCard";
 
-const IDLE = "#f59e0b";
-
 export default function LaggardsPage() {
   const [data, setData] = useState<LaggardsData | null>(null);
 
@@ -139,12 +137,18 @@ function IdleBar({
     <ChartCard title={title} subtitle="Inactive users">
       <ResponsiveContainer width="100%" height={200}>
         <BarChart data={rows} layout="vertical" margin={{ left: 10, right: 12, top: 4 }}>
+          <defs>
+            <linearGradient id="idleGrad" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.55} />
+              <stop offset="100%" stopColor="#f59e0b" stopOpacity={1} />
+            </linearGradient>
+          </defs>
           <XAxis type="number" tick={{ fontSize: 11 }} stroke="#94a3b8" allowDecimals={false} />
           <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} stroke="#94a3b8" width={110} />
-          <Tooltip />
-          <Bar dataKey="inactive_users" radius={[0, 4, 4, 0]}>
+          <Tooltip cursor={{ fill: "rgba(245,158,11,0.08)" }} />
+          <Bar dataKey="inactive_users" radius={[0, 6, 6, 0]} fill="url(#idleGrad)">
             {rows.map((_, i) => (
-              <Cell key={i} fill={IDLE} />
+              <Cell key={i} fill="url(#idleGrad)" />
             ))}
           </Bar>
         </BarChart>

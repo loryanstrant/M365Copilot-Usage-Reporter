@@ -6,6 +6,7 @@ export interface AppConfig {
   report_access_group_id: string | null;
   backfill_days: number;
   schedule_cron: string | null;
+  schedule_interval_hours: number;
   configured: boolean;
   updated_at: string | null;
   updated_by: string | null;
@@ -209,5 +210,29 @@ export interface LaggardsData {
 export interface CopilotScore {
   prompts: number;
   score: number;
+}
+
+export interface BreakdownRow {
+  d1: string | null;
+  d2: string | null;
+  prompts: number;
+}
+
+// --- backfill page ------------------------------------------------------
+export interface BackfillRun {
+  id: number;
+  status: string;
+  started_at: string | null;
+  finished_at: string | null;
+  stats: Record<string, unknown> | null;
+}
+
+export interface BackfillCoverage {
+  earliest_covered: string | null;
+  earliest_prompt: string | null;
+  lookback_days: number | null;
+  total_prompts: number;
+  has_run: boolean;
+  last_run_at: string | null;
 }
 
