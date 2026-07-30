@@ -21,6 +21,10 @@ param adminUsername string
 @secure()
 param adminPassword string
 
+// Workload prefix so every resource is instantly identifiable in the portal
+// (e.g. "copilot-psql-xxxx" instead of a bare "psql-xxxx"). Change this one
+// value to rebrand every resource name.
+var workload = 'copilot'
 var abbrs = {
   registry: 'acr'
   identity: 'id'
@@ -33,7 +37,7 @@ var pgDatabaseName = 'copilot'
 
 // --- Observability ------------------------------------------------------
 resource logs 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
-  name: '${abbrs.logs}-${resourceToken}'
+  name: '${workload}-${abbrs.logs}-${resourceToken}'
   location: location
   tags: tags
   properties: {
@@ -44,13 +48,14 @@ resource logs 'Microsoft.OperationalInsights/workspaces@2023-09-01' = {
 
 // --- Identity + registry ------------------------------------------------
 resource identity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
-  name: '${abbrs.identity}-${resourceToken}'
+  name: '${workload}-${abbrs.identity}-${resourceToken}'
   location: location
   tags: tags
 }
 
 resource registry 'Microsoft.ContainerRegistry/registries@2023-11-01-preview' = {
-  name: '${abbrs.registry}${resourceToken}'
+  // ACR names are alphanumeric only (no hyphens) and globally unique.
+  name: '${workload}${abbrs.registry}${resourceToken}'
   location: location
   tags: tags
   sku: { name: 'Basic' }
@@ -76,7 +81,7 @@ resource acrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
 
 // --- Database -----------------------------------------------------------
 resource postgres 'Microsoft.DBforPostgreSQL/flexibleServers@2024-08-01' = {
-  name: '${abbrs.postgres}-${resourceToken}'
+  name: '${workload}-${abbrs.postgres}-${resourceToken}'
   location: location
   tags: tags
   sku: {
@@ -110,7 +115,7 @@ var databaseUrl = 'postgresql+psycopg://${pgAdminLogin}:${postgresAdminPassword}
 
 // --- Container Apps environment ----------------------------------------
 resource containerEnv 'Microsoft.App/managedEnvironments@2024-03-01' = {
-  name: '${abbrs.env}-${resourceToken}'
+  name: '${workload}-${abbrs.env}-${resourceToken}'
   location: location
   tags: tags
   properties: {
@@ -144,7 +149,7 @@ var sharedEnv = [
 
 // --- API (web) container app -------------------------------------------
 resource api 'Microsoft.App/containerApps@2024-03-01' = {
-  name: 'ca-api-${resourceToken}'
+  name: '${workload}-api-${resourceToken}'
   location: location
   tags: union(tags, { 'azd-service-name': 'api' })
   identity: {
@@ -184,7 +189,7 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
 
 // --- Worker container app (no ingress) ---------------------------------
 resource worker 'Microsoft.App/containerApps@2024-03-01' = {
-  name: 'ca-worker-${resourceToken}'
+  name: '${workload}-worker-${resourceToken}'
   location: location
   tags: union(tags, { 'azd-service-name': 'worker' })
   identity: {

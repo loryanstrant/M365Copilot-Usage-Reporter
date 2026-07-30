@@ -3,7 +3,22 @@
 A self-contained, containerised replacement for a Power Platform + Power BI solution. It ingests
 Microsoft 365 Copilot usage from Microsoft Graph (app-only / client credentials), stores it in
 PostgreSQL, computes metrics, and serves a web dashboard. Runs anywhere via Docker and deploys to
-Azure Container Apps via `azd`.
+Azure Container Apps.
+
+## Deploy to Azure (one click)
+
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Floryanstrant%2FM365Copilot-Usage-Reporter%2Fmain%2Finfra%2Fazuredeploy.json/createUIDefinitionUri/https%3A%2F%2Fraw.githubusercontent.com%2Floryanstrant%2FM365Copilot-Usage-Reporter%2Fmain%2Finfra%2FcreateUiDefinition.json)
+
+The button provisions everything into a resource group of your choice: a PostgreSQL flexible
+server, a Container Apps environment, and the **api** + **worker** container apps (pulled as
+prebuilt public images from GitHub Container Registry). You only enter an **admin password** — the
+database password and encryption keys are generated for you. When the deployment finishes, open the
+`dashboardUrl` output, sign in, and complete the in-app **Settings** to connect Microsoft Graph.
+
+> **Maintainers:** the button relies on public images. After the first run of the
+> **Publish container images** workflow, set both GHCR packages
+> (`m365copilot-usage-reporter/api` and `.../worker`) to **Public** once, so Container Apps can pull
+> them anonymously. See [`docs/deploy.md`](docs/deploy.md) for the full walkthrough.
 
 ## Terminology
 
@@ -96,9 +111,9 @@ The Graph app registration needs application permissions
 
 ## Deploy to Azure (azd)
 
-Infrastructure (Container Apps Environment, api + worker container apps,
-PostgreSQL Flexible Server, Container Registry, Log Analytics) is defined in
-`/infra` and `azure.yaml`.
+Prefer building from source? Infrastructure (Container Apps Environment, api + worker container apps,
+PostgreSQL Flexible Server, Container Registry, Log Analytics) is defined in `/infra` and
+`azure.yaml`.
 
 ```powershell
 # Provide the secrets azd will pass to Bicep
@@ -114,6 +129,9 @@ azd down    # tear everything down
 The API container serves the built React bundle, so the deployed app is a single
 public endpoint. Swap `DATABASE_URL` to any Postgres to move the database.
 
+> `FERNET_KEY` may be any non-empty string — a proper Fernet key is used as-is, anything else is
+> hashed into a valid key. This is what lets the one-click template auto-generate it.
+
 ## Build phases
 
 This project is built incrementally (see `COPILOT-BUILD-PLAN.md`):
@@ -127,3 +145,5 @@ This project is built incrementally (see `COPILOT-BUILD-PLAN.md`):
 - **Phase 6** — Auth & secure admin ✅
 - **Phase 7** — React dashboard ✅
 - **Phase 8** — Deploy (azd + Bicep) ✅
+- **Phase 9** — Slicers, sortable tables, product logos, executive briefing ✅
+- **Phase 10** — One-click "Deploy to Azure" (ARM + GHCR images) ✅

@@ -1,0 +1,249 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "description": "One-click deploy of the M365 Copilot Usage Reporter to Azure Container Apps. Pulls prebuilt public images from GitHub Container Registry, provisions a PostgreSQL flexible server, and wires everything together. Only an admin password is required; all other secrets are generated automatically."
+  },
+  "parameters": {
+    "namePrefix": {
+      "type": "string",
+      "defaultValue": "copilot",
+      "minLength": 2,
+      "maxLength": 12,
+      "metadata": {
+        "description": "Short prefix used to name every resource (letters/numbers only)."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]",
+      "metadata": {
+        "description": "Azure region for all resources."
+      }
+    },
+    "imageRegistry": {
+      "type": "string",
+      "defaultValue": "ghcr.io/loryanstrant/m365copilot-usage-reporter",
+      "metadata": {
+        "description": "Registry path holding the public 'api' and 'worker' images."
+      }
+    },
+    "imageTag": {
+      "type": "string",
+      "defaultValue": "latest",
+      "metadata": {
+        "description": "Image tag to deploy (e.g. 'latest' or a version like 'v1.0.0')."
+      }
+    },
+    "adminUsername": {
+      "type": "string",
+      "defaultValue": "admin",
+      "metadata": {
+        "description": "Username for the first dashboard sign-in."
+      }
+    },
+    "adminPassword": {
+      "type": "securestring",
+      "minLength": 8,
+      "metadata": {
+        "description": "Password for the first dashboard sign-in. Choose a strong value."
+      }
+    },
+    "postgresAdminPassword": {
+      "type": "securestring",
+      "defaultValue": "[concat('Pg', uniqueString(resourceGroup().id, deployment().name), toUpper(uniqueString(subscription().subscriptionId, resourceGroup().id)), '#9aZ')]",
+      "metadata": {
+        "description": "Internal PostgreSQL admin password. Generated automatically; you never need to enter or see it."
+      }
+    },
+    "fernetKey": {
+      "type": "securestring",
+      "defaultValue": "[newGuid()]",
+      "metadata": {
+        "description": "Secret used to encrypt the Graph client secret at rest. Generated automatically."
+      }
+    },
+    "secretKey": {
+      "type": "securestring",
+      "defaultValue": "[newGuid()]",
+      "metadata": {
+        "description": "Secret used to sign session tokens. Generated automatically."
+      }
+    }
+  },
+  "variables": {
+    "resourceToken": "[toLower(uniqueString(resourceGroup().id, parameters('namePrefix')))]",
+    "logsName": "[format('{0}-log-{1}', parameters('namePrefix'), variables('resourceToken'))]",
+    "envName": "[format('{0}-cae-{1}', parameters('namePrefix'), variables('resourceToken'))]",
+    "pgServerName": "[format('{0}-psql-{1}', parameters('namePrefix'), variables('resourceToken'))]",
+    "pgAdminLogin": "copilotadmin",
+    "pgDatabaseName": "copilot",
+    "apiAppName": "[format('{0}-api-{1}', parameters('namePrefix'), variables('resourceToken'))]",
+    "workerAppName": "[format('{0}-worker-{1}', parameters('namePrefix'), variables('resourceToken'))]",
+    "apiImage": "[format('{0}/api:{1}', parameters('imageRegistry'), parameters('imageTag'))]",
+    "workerImage": "[format('{0}/worker:{1}', parameters('imageRegistry'), parameters('imageTag'))]",
+    "databaseUrl": "[format('postgresql+psycopg://{0}:{1}@{2}.postgres.database.azure.com:5432/{3}?sslmode=require', variables('pgAdminLogin'), parameters('postgresAdminPassword'), variables('pgServerName'), variables('pgDatabaseName'))]",
+    "sharedSecrets": [
+      { "name": "database-url", "value": "[variables('databaseUrl')]" },
+      { "name": "fernet-key", "value": "[parameters('fernetKey')]" },
+      { "name": "secret-key", "value": "[parameters('secretKey')]" },
+      { "name": "admin-password", "value": "[parameters('adminPassword')]" }
+    ],
+    "sharedEnv": [
+      { "name": "DATABASE_URL", "secretRef": "database-url" },
+      { "name": "FERNET_KEY", "secretRef": "fernet-key" },
+      { "name": "SECRET_KEY", "secretRef": "secret-key" },
+      { "name": "ADMIN_USERNAME", "value": "[parameters('adminUsername')]" },
+      { "name": "ADMIN_PASSWORD", "secretRef": "admin-password" },
+      { "name": "APP_ENV", "value": "production" }
+    ]
+  },
+  "resources": [
+    {
+      "type": "Microsoft.OperationalInsights/workspaces",
+      "apiVersion": "2023-09-01",
+      "name": "[variables('logsName')]",
+      "location": "[parameters('location')]",
+      "properties": {
+        "sku": { "name": "PerGB2018" },
+        "retentionInDays": 30
+      }
+    },
+    {
+      "type": "Microsoft.DBforPostgreSQL/flexibleServers",
+      "apiVersion": "2024-08-01",
+      "name": "[variables('pgServerName')]",
+      "location": "[parameters('location')]",
+      "sku": {
+        "name": "Standard_B1ms",
+        "tier": "Burstable"
+      },
+      "properties": {
+        "version": "16",
+        "administratorLogin": "[variables('pgAdminLogin')]",
+        "administratorLoginPassword": "[parameters('postgresAdminPassword')]",
+        "storage": { "storageSizeGB": 32 },
+        "backup": { "backupRetentionDays": 7, "geoRedundantBackup": "Disabled" },
+        "highAvailability": { "mode": "Disabled" },
+        "network": { "publicNetworkAccess": "Enabled" }
+      },
+      "resources": [
+        {
+          "type": "databases",
+          "apiVersion": "2024-08-01",
+          "name": "[variables('pgDatabaseName')]",
+          "dependsOn": [
+            "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers', variables('pgServerName'))]"
+          ]
+        },
+        {
+          "type": "firewallRules",
+          "apiVersion": "2024-08-01",
+          "name": "AllowAllAzureServices",
+          "dependsOn": [
+            "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers', variables('pgServerName'))]",
+            "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers/databases', variables('pgServerName'), variables('pgDatabaseName'))]"
+          ],
+          "properties": {
+            "startIpAddress": "0.0.0.0",
+            "endIpAddress": "0.0.0.0"
+          }
+        }
+      ]
+    },
+    {
+      "type": "Microsoft.App/managedEnvironments",
+      "apiVersion": "2024-03-01",
+      "name": "[variables('envName')]",
+      "location": "[parameters('location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', variables('logsName'))]"
+      ],
+      "properties": {
+        "appLogsConfiguration": {
+          "destination": "log-analytics",
+          "logAnalyticsConfiguration": {
+            "customerId": "[reference(resourceId('Microsoft.OperationalInsights/workspaces', variables('logsName')), '2023-09-01').customerId]",
+            "sharedKey": "[listKeys(resourceId('Microsoft.OperationalInsights/workspaces', variables('logsName')), '2023-09-01').primarySharedKey]"
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.App/containerApps",
+      "apiVersion": "2024-03-01",
+      "name": "[variables('apiAppName')]",
+      "location": "[parameters('location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.App/managedEnvironments', variables('envName'))]",
+        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers', variables('pgServerName'))]",
+        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers/databases', variables('pgServerName'), variables('pgDatabaseName'))]",
+        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers/firewallRules', variables('pgServerName'), 'AllowAllAzureServices')]"
+      ],
+      "properties": {
+        "managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', variables('envName'))]",
+        "configuration": {
+          "activeRevisionsMode": "Single",
+          "ingress": {
+            "external": true,
+            "targetPort": 8000,
+            "transport": "auto",
+            "allowInsecure": false
+          },
+          "secrets": "[variables('sharedSecrets')]"
+        },
+        "template": {
+          "containers": [
+            {
+              "name": "api",
+              "image": "[variables('apiImage')]",
+              "resources": { "cpu": "[json('0.5')]", "memory": "1Gi" },
+              "env": "[concat(variables('sharedEnv'), createArray(createObject('name', 'RUN_MIGRATIONS_ON_STARTUP', 'value', 'true')))]"
+            }
+          ],
+          "scale": { "minReplicas": 1, "maxReplicas": 3 }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.App/containerApps",
+      "apiVersion": "2024-03-01",
+      "name": "[variables('workerAppName')]",
+      "location": "[parameters('location')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.App/managedEnvironments', variables('envName'))]",
+        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers', variables('pgServerName'))]",
+        "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers/databases', variables('pgServerName'), variables('pgDatabaseName'))]",
+        "[resourceId('Microsoft.App/containerApps', variables('apiAppName'))]"
+      ],
+      "properties": {
+        "managedEnvironmentId": "[resourceId('Microsoft.App/managedEnvironments', variables('envName'))]",
+        "configuration": {
+          "activeRevisionsMode": "Single",
+          "secrets": "[variables('sharedSecrets')]"
+        },
+        "template": {
+          "containers": [
+            {
+              "name": "worker",
+              "image": "[variables('workerImage')]",
+              "resources": { "cpu": "[json('0.5')]", "memory": "1Gi" },
+              "env": "[concat(variables('sharedEnv'), createArray(createObject('name', 'RUN_MIGRATIONS_ON_STARTUP', 'value', 'false')))]"
+            }
+          ],
+          "scale": { "minReplicas": 1, "maxReplicas": 1 }
+        }
+      }
+    }
+  ],
+  "outputs": {
+    "dashboardUrl": {
+      "type": "string",
+      "value": "[format('https://{0}', reference(resourceId('Microsoft.App/containerApps', variables('apiAppName')), '2024-03-01').configuration.ingress.fqdn)]"
+    },
+    "adminUsername": {
+      "type": "string",
+      "value": "[parameters('adminUsername')]"
+    }
+  }
+}
