@@ -49,6 +49,21 @@ class Settings(BaseSettings):
     ingest_concurrency: int = Field(default=15, alias="INGEST_CONCURRENCY")
     default_backfill_days: int = Field(default=30, alias="DEFAULT_BACKFILL_DAYS")
 
+    # --- Central translations (app-name map + exclusions) -----------------
+    # Deployed instances fetch this file and merge it over the built-in
+    # defaults, so renames/exclusions roll out without a redeploy. Set empty to
+    # disable remote fetch and use built-in defaults only.
+    translations_url: str = Field(
+        default=(
+            "https://raw.githubusercontent.com/loryanstrant/"
+            "M365Copilot-Usage-Reporter/main/translations/app-names.json"
+        ),
+        alias="TRANSLATIONS_URL",
+    )
+    translations_refresh_hours: int = Field(
+        default=6, alias="TRANSLATIONS_REFRESH_HOURS"
+    )
+
     @property
     def is_production(self) -> bool:
         return self.app_env.lower() in {"production", "prod"}

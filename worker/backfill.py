@@ -25,6 +25,7 @@ from sqlalchemy import select
 from shared.config import settings
 from shared.models import IngestState, JobRun, LicensedUser, Prompt
 from shared.upsert import bulk_upsert
+from shared.translations import load_translations
 from worker.ingest import (
     _PROMPT_UPDATE_KEYS,
     GraphLike,
@@ -158,6 +159,9 @@ async def run_backfill(
         session.add(job)
         await session.flush()
 
+        # Load the (possibly centrally-updated) app-name translations once.
+        translations = await load_translations()
+
         sem = asyncio.Semaphore(concurrency)
         write_lock = asyncio.Lock()
         total_prompts = 0
@@ -189,7 +193,7 @@ async def run_backfill(
                     async for raw in graph.iter_enterprise_interactions(
                         uid, win_start, win_end
                     ):
-                        row = transform_interaction(raw, uid)
+                        row = transform_interaction(raw, uid, translations)
                         if row and row.get("prompt_id"):
                             rows.append(row)
                 async with write_lock:

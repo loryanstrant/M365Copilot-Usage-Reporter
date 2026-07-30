@@ -28,6 +28,7 @@ from shared.models import (
     Prompt,
 )
 from shared.upsert import bulk_upsert
+from shared.translations import load_translations
 from worker.graph import GraphAuth, GraphClient
 from worker.transforms import (
     has_configured_sku,
@@ -163,6 +164,8 @@ async def sync_prompts(
         uid for (uid,) in (await session.execute(select(LicensedUser.user_id))).all()
     ]
     watermarks = await _load_watermarks(session)
+    # Load the (possibly centrally-updated) app-name translations once per run.
+    translations = await load_translations()
     # A scheduled/incremental run only ever looks back a short window on first
     # sight of a user (the last 24 hours). Deep history is the job of the
     # dedicated historical backfill, not the recurring ingest.
@@ -174,7 +177,7 @@ async def sync_prompts(
         rows: list[dict[str, Any]] = []
         async with sem:
             async for raw in graph.iter_enterprise_interactions(uid, since, now):
-                row = transform_interaction(raw, uid)
+                row = transform_interaction(raw, uid, translations)
                 if row and row.get("prompt_id"):
                     rows.append(row)
         return uid, rows

@@ -13,26 +13,16 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any
 
+from shared.translations import Translations, default_translations
+
 # Prefix stamped onto Copilot app identifiers by Graph; stripped at ingest.
 APP_PREFIX = "IPM.SkypeTeams.Message.Copilot."
-
-# App identifier that must never appear in the dataset.
-EXCLUDED_APP = "M365AdminCenter"
 
 # Graph returns two rows per exchange: the human 'userPrompt' and Copilot's
 # 'aiResponse'. Only the human prompt is a genuine record of usage, so responses
 # are dropped at ingest and never stored or counted. (Ref: aiInteraction schema —
 # interactionType is one of userPrompt | aiResponse | unknownFutureValue.)
 AI_RESPONSE_TYPE = "aiResponse"
-
-# Normalisation of the raw (prefix-stripped) app identifier to a display name.
-_APP_NAME_MAP = {
-    "bizchat": "Copilot Chat",
-    "webchat": "Copilot Chat",
-    "privatechat": "Copilot Chat",
-    "vivaengage": "Viva Engage",
-    "officecopilotsearchanswer": "Copilot Search",
-}
 
 # Fragment (case-insensitive) in a UPN/mail that marks a non-primary account.
 _ONMICROSOFT = "onmicrosoft.com"
@@ -47,14 +37,17 @@ def strip_app_prefix(value: str | None) -> str | None:
     return value
 
 
-def normalise_app_name(app_class: str | None) -> str | None:
+def normalise_app_name(
+    app_class: str | None, translations: Translations | None = None
+) -> str | None:
     """Map a prefix-stripped app identifier to its friendly display name.
 
-    Unknown identifiers are returned unchanged.
+    Unknown identifiers are returned unchanged. ``translations`` defaults to the
+    built-in map; ingest passes a possibly remote-updated one.
     """
     if app_class is None:
         return None
-    return _APP_NAME_MAP.get(app_class.strip().lower(), app_class)
+    return (translations or default_translations()).display_name(app_class)
 
 
 def derive_conversation_location(conversation_type: str | None) -> str:
@@ -146,14 +139,20 @@ def _parse_date(value: str | None) -> date | None:
 
 
 def transform_interaction(
-    raw: dict[str, Any], user_id: str
+    raw: dict[str, Any],
+    user_id: str,
+    translations: Translations | None = None,
 ) -> dict[str, Any] | None:
     """Turn a raw Graph interaction into a **Prompt** row, or ``None`` to drop.
 
-    Returns ``None`` for rows that must be excluded (e.g. M365 Admin Center).
+    Returns ``None`` for rows that must be excluded: Copilot's own responses,
+    and any app class marked as excluded (e.g. M365 Admin Center, the
+    system-generated PredictiveChat). ``translations`` defaults to the built-in
+    rules; ingest passes a possibly remote-updated set.
     """
+    tr = translations or default_translations()
     app_class = strip_app_prefix(raw.get("appClass"))
-    if app_class == EXCLUDED_APP:
+    if tr.is_excluded(app_class):
         return None
 
     # Drop Copilot's own responses — only the human prompt counts as usage.
@@ -167,7 +166,7 @@ def transform_interaction(
         "prompt_id": raw.get("id"),
         "user_id": user_id,
         "conversation_id": raw.get("sessionId"),
-        "app_name": normalise_app_name(app_class),
+        "app_name": normalise_app_name(app_class, tr),
         "prompt_date": _parse_date(raw.get("createdDateTime")),
         "conversation_type": conversation_type,
         "conversation_location": derive_conversation_location(conversation_type),
