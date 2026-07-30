@@ -40,6 +40,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch {
           setToken(null);
         }
+      } else {
+        // No app token yet: try a silent Entra SSO exchange. Succeeds only when
+        // Azure Easy Auth has injected an identity (i.e. the user already signed
+        // in via their organisation); otherwise we fall through to the login page.
+        try {
+          const res = await api<{ access_token: string; username: string; role: string }>(
+            "/auth/entra",
+            { method: "POST" },
+          );
+          setToken(res.access_token);
+          if (active) setUser({ username: res.username, role: res.role });
+        } catch {
+          /* no SSO identity — show the sign-in page */
+        }
       }
       if (active) setLoading(false);
     })();

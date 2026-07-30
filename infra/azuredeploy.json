@@ -69,6 +69,34 @@
       "metadata": {
         "description": "Secret used to sign session tokens. Generated automatically."
       }
+    },
+    "enableEntraAuth": {
+      "type": "bool",
+      "defaultValue": false,
+      "metadata": {
+        "description": "Enable Entra ID single sign-on (Container Apps Easy Auth) so licensed users can view the dashboard with their work account. Leave off to use only the admin password. When on, provide the Entra app registration client ID and secret below."
+      }
+    },
+    "entraClientId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Only used when Entra SSO is enabled. Application (client) ID of the app registration used for sign-in. You can reuse the reporter's own app registration."
+      }
+    },
+    "entraClientSecret": {
+      "type": "securestring",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Only used when Entra SSO is enabled. A client secret for the sign-in app registration."
+      }
+    },
+    "entraTenantId": {
+      "type": "string",
+      "defaultValue": "[subscription().tenantId]",
+      "metadata": {
+        "description": "Only used when Entra SSO is enabled. Directory (tenant) ID that issues sign-in tokens. Defaults to the deployment tenant."
+      }
     }
   },
   "variables": {
@@ -96,7 +124,8 @@
       { "name": "ADMIN_USERNAME", "value": "[parameters('adminUsername')]" },
       { "name": "ADMIN_PASSWORD", "secretRef": "admin-password" },
       { "name": "APP_ENV", "value": "production" }
-    ]
+    ],
+    "apiSecrets": "[if(parameters('enableEntraAuth'), concat(variables('sharedSecrets'), createArray(createObject('name', 'aad-client-secret', 'value', parameters('entraClientSecret')))), variables('sharedSecrets'))]"
   },
   "resources": [
     {
@@ -190,7 +219,7 @@
             "transport": "auto",
             "allowInsecure": false
           },
-          "secrets": "[variables('sharedSecrets')]"
+          "secrets": "[variables('apiSecrets')]"
         },
         "template": {
           "containers": [
@@ -202,6 +231,38 @@
             }
           ],
           "scale": { "minReplicas": 1, "maxReplicas": 3 }
+        }
+      }
+    },
+    {
+      "condition": "[parameters('enableEntraAuth')]",
+      "type": "Microsoft.App/containerApps/authConfigs",
+      "apiVersion": "2024-03-01",
+      "name": "[format('{0}/current', variables('apiAppName'))]",
+      "dependsOn": [
+        "[resourceId('Microsoft.App/containerApps', variables('apiAppName'))]"
+      ],
+      "properties": {
+        "platform": { "enabled": true },
+        "globalValidation": { "unauthenticatedClientAction": "AllowAnonymous" },
+        "identityProviders": {
+          "azureActiveDirectory": {
+            "enabled": true,
+            "registration": {
+              "openIdIssuer": "[format('https://login.microsoftonline.com/{0}/v2.0', parameters('entraTenantId'))]",
+              "clientId": "[parameters('entraClientId')]",
+              "clientSecretSettingName": "aad-client-secret"
+            },
+            "validation": {
+              "allowedAudiences": [
+                "[parameters('entraClientId')]",
+                "[format('api://{0}', parameters('entraClientId'))]"
+              ]
+            }
+          }
+        },
+        "login": {
+          "tokenStore": { "enabled": true }
         }
       }
     },
@@ -244,6 +305,13 @@
     "adminUsername": {
       "type": "string",
       "value": "[parameters('adminUsername')]"
+    },
+    "entraRedirectUriToRegister": {
+      "type": "string",
+      "value": "[if(parameters('enableEntraAuth'), format('https://{0}/.auth/login/aad/callback', reference(resourceId('Microsoft.App/containerApps', variables('apiAppName')), '2024-03-01').configuration.ingress.fqdn), 'Entra SSO disabled')]",
+      "metadata": {
+        "description": "When Entra SSO is enabled, add this URL as a Web redirect URI on your app registration."
+      }
     }
   }
 }

@@ -186,6 +186,31 @@ class GraphClient:
         data = await self._request(f"{GRAPH_BASE}/subscribedSkus")
         return data.get("value", [])
 
+    async def check_member_groups(
+        self, user_id: str, group_ids: list[str]
+    ) -> list[str]:
+        """Return which of ``group_ids`` the user is a (transitive) member of.
+
+        Uses the app-only ``checkMemberGroups`` action (needs Directory.Read.All,
+        which the reporter already requires). Empty ``group_ids`` returns ``[]``.
+        """
+        if not group_ids:
+            return []
+        token = await self._auth.token()
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+        }
+        url = f"{GRAPH_BASE}/users/{user_id}/checkMemberGroups"
+        async with self._sem:
+            resp = await self._client.post(
+                url, headers=headers, json={"groupIds": group_ids}
+            )
+        if resp.status_code >= 400:
+            raise GraphError(f"checkMemberGroups {resp.status_code}: {resp.text[:300]}")
+        return list(resp.json().get("value", []))
+
     async def iter_directory_users(self) -> AsyncIterator[dict[str, Any]]:
         """Yield directory users with the fields needed for ``entra_users``."""
         params = {

@@ -71,12 +71,50 @@ The reporter needs an Entra app registration with **application** permissions:
 
 Grant admin consent, create a client secret, then in the dashboard:
 
-1. **Settings** → enter **Tenant ID**, **Client ID**, **Client Secret**, confirm the Copilot SKU
-   id(s), and (optionally) a schedule + report-access group.
+1. **Settings** → a **guided first-run wizard** walks you through creating the app
+   registration (with copy buttons and an optional one-shot PowerShell script). Enter the
+   **Tenant ID**, **Client ID**, **Client Secret**, confirm the Copilot SKU id(s), and
+   (optionally) a schedule + report-access group.
 2. **Test connection** → **Run ingest now** (or start a **Backfill** for history).
 3. Explore the dashboard.
 
 The client secret is encrypted at rest with the Fernet key before it touches the database.
+
+---
+
+## Entra single sign-on (optional)
+
+By default the dashboard uses a single admin password. You can additionally let licensed users
+sign in with their **work account** via Azure Container Apps **Easy Auth** — no code or extra
+services, and it's free. Administration stays behind the password; SSO users get a read-only
+**viewer** role.
+
+**Enable it at deploy time** by setting these template parameters (all default off/empty):
+
+| Parameter | Value |
+| --- | --- |
+| `enableEntraAuth` | `true` |
+| `entraClientId` | Application (client) ID of the sign-in app registration (you can reuse the reporter's own) |
+| `entraClientSecret` | A client secret for that app registration |
+| `entraTenantId` | Defaults to the deployment tenant |
+
+**Two one-time steps on the app registration** (Easy Auth is the relying party):
+
+1. **Redirect URI** — after the deploy finishes, copy the deployment output
+   `entraRedirectUriToRegister` (looks like `https://<app>.azurecontainerapps.io/.auth/login/aad/callback`)
+   and add it under the app registration's **Authentication → Web → Redirect URIs**.
+2. **Group claim (recommended if you set a report-access group)** — under **Token configuration →
+   Add groups claim**, include **Security groups**. This lets the group gate work straight from the
+   token. Without it, the reporter falls back to an app-only Graph `checkMemberGroups` call using the
+   permissions it already has.
+
+Once enabled, the sign-in page shows a **"Sign in with Microsoft"** button, and returning users are
+signed in silently. If the configured **report access group** is set, only its members are admitted;
+everyone else is refused (fail-closed).
+
+To enable it on an already-deployed instance, redeploy the template with the parameters above, or add
+the authentication config to the api container app in the portal (**Authentication → Add identity
+provider → Microsoft**, unauthenticated access **allowed**).
 
 ---
 

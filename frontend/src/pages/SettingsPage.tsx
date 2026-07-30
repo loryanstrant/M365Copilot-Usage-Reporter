@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { api, ApiError } from "../api/client";
+import SetupWizard from "../components/SetupWizard";
 import type {
   AppConfig,
   IngestRunResult,
@@ -177,6 +178,8 @@ export default function SettingsPage() {
         </div>
       )}
 
+      <SetupWizard defaultOpen={!status?.configured} />
+
       <div className="grid gap-8 lg:grid-cols-3">
         <form onSubmit={onSave} className="card space-y-5 p-6 lg:col-span-2">
           <h2 className="text-lg font-semibold">Microsoft Graph</h2>
@@ -246,7 +249,7 @@ export default function SettingsPage() {
 
           <Field
             label="Report access group ID"
-            hint="Optional Entra security group whose members may view the report."
+            hint="Optional Entra security group whose members may view the report via single sign-on. Leave blank to allow any signed-in user. The admin password login is unaffected."
           >
             <input
               value={groupId}

@@ -117,7 +117,12 @@ then **Run ingest now** (or **Run backfill** for history).
 - **Licenses** — enabled/allocated/available over time.
 - **About** — data freshness + methodology.
 - **Settings (admin)** — Graph config (secret write-only, Fernet-encrypted),
-  test connection, run ingest, resumable **backfill** with live progress.
+  a **guided app-registration setup wizard**, test connection, run ingest,
+  resumable **backfill** with live progress.
+- **Entra single sign-on (optional)** — Container Apps Easy Auth lets licensed
+  users view the report with their work account (read-only), optionally gated to
+  an Entra security group. Admin stays password-protected. See
+  [docs/deploy.md](docs/deploy.md#entra-single-sign-on-optional).
 - Global date-range/app **filters**, **CSV export**, and a **light/dark** theme.
 
 ## Running tests
@@ -135,7 +140,8 @@ running stack you can also run `docker compose exec api python -m pytest`.
 1. `docker compose up` (or `azd up`).
 2. Sign in at http://localhost:5173 with `ADMIN_USERNAME` / `ADMIN_PASSWORD`
    (seeded automatically on first start).
-3. **Settings** → enter Tenant ID, Client ID, Client Secret, confirm the Copilot
+3. **Settings** → follow the guided setup wizard to create the app registration,
+   then enter Tenant ID, Client ID, Client Secret, confirm the Copilot
    SKU id(s), set the backfill window and (optionally) schedule + report-access group.
 4. **Test connection** → **Run ingest now** (or start **Backfill**) → watch progress.
 5. Explore the dashboard.
