@@ -84,6 +84,33 @@ async def test_daily_trend(seeded):
 
 
 @pytest.mark.asyncio
+async def test_conversations_count_null_sessions(session):
+    """Session-less prompts (NULL conversation_id) must each count as their own
+    conversation, not be dropped from COUNT(DISTINCT) — the bug behind impossible
+    prompt:conversation ratios."""
+    d = date(2026, 7, 22)
+    session.add_all([
+        _prompt("np1", "user-1", None, "Word", d),
+        _prompt("np2", "user-1", None, "Excel", d),
+        _prompt("np3", "user-1", None, "PowerPoint", d),
+        # Two prompts that DO share a real session -> one conversation.
+        _prompt("sp1", "user-2", "sess-1", "Copilot Chat", d),
+        _prompt("sp2", "user-2", "sess-1", "Copilot Chat", d),
+    ])
+    await session.commit()
+
+    s = await metrics.summary(session, today=date(2026, 7, 29))
+    assert s["prompts"] == 5
+    # 3 session-less (each its own) + 1 shared session = 4 conversations.
+    assert s["conversations"] == 4
+
+    rows = await metrics.daily(session)
+    day = {r["date"]: r for r in rows}["2026-07-22"]
+    assert day["prompts"] == 5
+    assert day["conversations"] == 4
+
+
+@pytest.mark.asyncio
 async def test_by_app(seeded):
     rows = await metrics.by_app(seeded, today=TODAY)
     apps = {r["app_name"]: r for r in rows}
@@ -91,6 +118,21 @@ async def test_by_app(seeded):
     assert apps["Copilot Chat"]["conversations"] == 2
     assert apps["Copilot Chat"]["users"] == 2
     assert apps["Word"]["days_since_last"] == (TODAY - date(2026, 5, 1)).days
+
+
+@pytest.mark.asyncio
+async def test_by_app_daily(seeded):
+    rows = await metrics.by_app_daily(seeded)
+    # Rows are per app per day; Copilot Chat has two prompts on 2026-07-20 (c1)
+    # and one on 2026-07-10 (c3).
+    cc = {r["date"]: r for r in rows if r["app_name"] == "Copilot Chat"}
+    assert cc["2026-07-20"]["prompts"] == 2
+    assert cc["2026-07-20"]["conversations"] == 1
+    assert cc["2026-07-10"]["prompts"] == 1
+    teams = [r for r in rows if r["app_name"] == "Teams"]
+    assert teams == [
+        {"app_name": "Teams", "date": "2026-07-25", "prompts": 1, "conversations": 1}
+    ]
 
 
 @pytest.mark.asyncio
@@ -118,6 +160,22 @@ async def test_active_inactive(seeded):
     assert res["licensed"] == 4
     assert res["active"] == 2
     assert res["inactive"] == 2
+
+
+@pytest.mark.asyncio
+async def test_briefing(seeded):
+    b = await metrics.briefing(seeded, today=TODAY)
+    assert b["window_days"] == 30
+    assert b["period_start"] == "2026-06-29"
+    assert b["period_end"] == "2026-07-29"
+    # Current 30d: p1,p2,p3,p4 (p5 on 2026-05-01 is outside); previous 30d: none.
+    assert b["current"] == {"prompts": 4, "conversations": 3, "active_users": 2}
+    assert b["previous"] == {"prompts": 0, "conversations": 0, "active_users": 0}
+    assert b["licensed_users"] == 4
+    assert b["inactive_users"] == 2
+    assert b["adoption_rate"] == 0.5
+    assert b["top_apps"][0] == {"name": "Copilot Chat", "prompts": 3, "prev_prompts": 0}
+    assert b["top_departments"][0] == {"name": "Sales", "prompts": 3}
 
 
 @pytest.mark.asyncio

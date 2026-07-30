@@ -11,6 +11,7 @@ import {
 import { api } from "../api/client";
 import type { LicensePoint } from "../api/types";
 import ChartCard from "../components/ChartCard";
+import ChartTooltip from "../components/ChartTooltip";
 import KpiCard from "../components/KpiCard";
 
 export default function LicensesPage() {
@@ -68,7 +69,7 @@ export default function LicensesPage() {
               <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.35} />
               <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="#94a3b8" />
               <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" allowDecimals={false} />
-              <Tooltip />
+              <Tooltip content={<ChartTooltip />} />
               <Area type="monotone" dataKey="enabled" stroke="#2f5ae0" strokeWidth={2.5} fill="url(#licEnabled)" />
               <Area type="monotone" dataKey="allocated" stroke="#f59e0b" strokeWidth={2.5} fill="url(#licAllocated)" />
               <Area type="monotone" dataKey="available" stroke="#10b981" strokeWidth={2.5} fill="url(#licAvailable)" />

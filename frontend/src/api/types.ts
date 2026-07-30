@@ -76,6 +76,13 @@ export interface DailyPoint {
   conversations: number;
 }
 
+export interface AppDailyPoint {
+  app_name: string | null;
+  date: string;
+  prompts: number;
+  conversations: number;
+}
+
 export interface AppRow {
   app_name: string | null;
   prompts: number;
@@ -113,6 +120,40 @@ export interface ActiveInactive {
   licensed: number;
 }
 
+export interface BriefingPeriod {
+  prompts: number;
+  conversations: number;
+  active_users: number;
+}
+
+export interface BriefingApp {
+  name: string | null;
+  prompts: number;
+  prev_prompts: number;
+}
+
+export interface BriefingDept {
+  name: string | null;
+  prompts: number;
+}
+
+export interface Briefing {
+  window_days: number;
+  period_start: string;
+  period_end: string;
+  previous_period_start: string;
+  current: BriefingPeriod;
+  previous: BriefingPeriod;
+  licensed_users: number;
+  active_users: number;
+  adoption_rate: number;
+  inactive_users: number;
+  copilot_score: number;
+  total_prompts: number;
+  top_apps: BriefingApp[];
+  top_departments: BriefingDept[];
+}
+
 export interface LicensePoint {
   date: string;
   enabled: number;
@@ -120,8 +161,7 @@ export interface LicensePoint {
   available: number;
 }
 
-export interface Freshness {
-  last_run: {
+export interface Freshness {  last_run: {
     job_name: string;
     status: string;
     started_at: string | null;
@@ -162,6 +202,7 @@ export interface DailyChatType {
   date: string;
   chat_type: string;
   prompts: number;
+  conversations: number;
 }
 
 export interface LocationsData {
@@ -176,6 +217,7 @@ export interface RollupRow {
   name: string | null;
   manager_id?: string | null;
   prompts: number;
+  conversations: number;
 }
 
 export interface LeaderboardRollups {
@@ -216,6 +258,7 @@ export interface BreakdownRow {
   d1: string | null;
   d2: string | null;
   prompts: number;
+  conversations: number;
 }
 
 // --- backfill page ------------------------------------------------------

@@ -12,12 +12,14 @@ import { api } from "../api/client";
 import { downloadCsv } from "../api/csv";
 import type { LeaderboardRollups, UserRow } from "../api/types";
 import ChartCard from "../components/ChartCard";
+import ChartTooltip from "../components/ChartTooltip";
 import { barGradId } from "../components/chartTheme";
 import FilterBar from "../components/FilterBar";
-import { filterDeps, metricsQuery, useFilters } from "../filters/FiltersContext";
+import { filterDeps, metricLabel, metricsQuery, useFilters, type Metric } from "../filters/FiltersContext";
 
 export default function LeaderboardsPage() {
   const filters = useFilters();
+  const metric = filters.metric;
   const [rollups, setRollups] = useState<LeaderboardRollups | null>(null);
   const [users, setUsers] = useState<UserRow[]>([]);
 
@@ -70,9 +72,9 @@ export default function LeaderboardsPage() {
       <FilterBar />
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <RollupBar title="Top departments" rows={rollups?.departments ?? []} />
-        <RollupBar title="Top offices" rows={rollups?.offices ?? []} />
-        <RollupBar title="Top managers" rows={rollups?.managers ?? []} />
+        <RollupBar title="Top departments" rows={rollups?.departments ?? []} metric={metric} />
+        <RollupBar title="Top offices" rows={rollups?.offices ?? []} metric={metric} />
+        <RollupBar title="Top managers" rows={rollups?.managers ?? []} metric={metric} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -90,19 +92,21 @@ export default function LeaderboardsPage() {
 function RollupBar({
   title,
   rows,
+  metric,
 }: {
   title: string;
-  rows: { name: string | null; prompts: number }[];
+  rows: { name: string | null; prompts: number; conversations: number }[];
+  metric: Metric;
 }) {
-  const data = rows.map((r) => ({ name: r.name ?? "—", prompts: r.prompts }));
+  const data = rows.map((r) => ({ name: r.name ?? "—", value: r[metric] }));
   return (
-    <ChartCard title={title} subtitle="Prompts">
+    <ChartCard title={title} subtitle={metricLabel(metric)}>
       <ResponsiveContainer width="100%" height={230}>
         <BarChart data={data} layout="vertical" margin={{ left: 10, right: 12, top: 4 }}>
           <XAxis type="number" tick={{ fontSize: 11 }} stroke="#94a3b8" allowDecimals={false} />
           <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} stroke="#94a3b8" width={110} />
-          <Tooltip cursor={{ fill: "rgba(59,110,245,0.06)" }} />
-          <Bar dataKey="prompts" radius={[0, 6, 6, 0]} fill={`url(#${barGradId(0)})`}>
+          <Tooltip cursor={{ fill: "rgba(59,110,245,0.06)" }} content={<ChartTooltip />} />
+          <Bar dataKey="value" name={metricLabel(metric)} radius={[0, 6, 6, 0]} fill={`url(#${barGradId(0)})`}>
             {data.map((_, i) => (
               <Cell key={i} fill={`url(#${barGradId(0)})`} />
             ))}

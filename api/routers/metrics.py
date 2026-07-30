@@ -88,6 +88,14 @@ async def get_by_app(
     return await metrics.by_app(session, filters=filters)
 
 
+@router.get("/by-app-daily")
+async def get_by_app_daily(
+    filters: MetricFilters = Depends(get_filters),
+    session: AsyncSession = Depends(get_session),
+):
+    return await metrics.by_app_daily(session, filters=filters)
+
+
 @router.get("/by-user")
 async def get_by_user(
     filters: MetricFilters = Depends(get_filters),
@@ -151,6 +159,11 @@ async def get_categories(session: AsyncSession = Depends(get_session)):
 @router.get("/active-inactive")
 async def get_active_inactive(session: AsyncSession = Depends(get_session)):
     return await metrics.active_inactive(session)
+
+
+@router.get("/briefing")
+async def get_briefing(session: AsyncSession = Depends(get_session)):
+    return await metrics.briefing(session)
 
 
 @router.get("/licenses")

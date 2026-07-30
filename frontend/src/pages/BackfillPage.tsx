@@ -7,6 +7,7 @@ import type {
   BackfillRun,
   IngestRunResult,
 } from "../api/types";
+import DataTable, { type Column } from "../components/DataTable";
 
 function fmtDate(v: string | null): string {
   if (!v) return "—";
@@ -16,6 +17,29 @@ function fmtDate(v: string | null): string {
     return v;
   }
 }
+
+const BACKFILL_COLUMNS: Column<BackfillRun>[] = [
+  { key: "started", header: "Started", type: "date", accessor: (r) => r.started_at, render: (r) => fmtDate(r.started_at) },
+  { key: "status", header: "Status", type: "text", accessor: (r) => r.status, render: (r) => <StatusPill status={r.status} /> },
+  {
+    key: "lookback",
+    header: "Lookback",
+    type: "number",
+    accessor: (r) => r.stats?.lookback_days as number | undefined,
+    render: (r) => {
+      const d = r.stats?.lookback_days as number | undefined;
+      return d == null ? "—" : `${d}d`;
+    },
+  },
+  {
+    key: "prompts",
+    header: "Prompts",
+    type: "number",
+    accessor: (r) => (r.stats?.prompts as number | undefined) ?? 0,
+    render: (r) => ((r.stats?.prompts as number) ?? 0).toLocaleString(),
+  },
+  { key: "finished", header: "Finished", type: "date", accessor: (r) => r.finished_at, render: (r) => fmtDate(r.finished_at) },
+];
 
 const LOOKBACK_OPTIONS = [
   { days: 30, label: "30 days" },
@@ -230,48 +254,13 @@ export default function BackfillPage() {
             Backfill history
           </h3>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs uppercase tracking-wide text-slate-400">
-                {["Started", "Status", "Lookback", "Prompts", "Finished"].map((h) => (
-                  <th key={h} className="px-5 py-3 font-medium">
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {history.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-5 py-6 text-center text-slate-400">
-                    No backfill has run yet.
-                  </td>
-                </tr>
-              ) : (
-                history.map((r) => (
-                  <tr key={r.id} className="border-t border-slate-100 dark:border-slate-700">
-                    <td className="px-5 py-3 text-slate-700 dark:text-slate-200">
-                      {fmtDate(r.started_at)}
-                    </td>
-                    <td className="px-5 py-3">
-                      <StatusPill status={r.status} />
-                    </td>
-                    <td className="px-5 py-3 tabular-nums text-slate-600 dark:text-slate-300">
-                      {(r.stats?.lookback_days as number) ?? "—"}d
-                    </td>
-                    <td className="px-5 py-3 tabular-nums text-slate-600 dark:text-slate-300">
-                      {((r.stats?.prompts as number) ?? 0).toLocaleString()}
-                    </td>
-                    <td className="px-5 py-3 text-slate-600 dark:text-slate-300">
-                      {fmtDate(r.finished_at)}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          rows={history}
+          getRowKey={(r) => r.id}
+          initialSort={{ key: "started", dir: "desc" }}
+          emptyMessage="No backfill has run yet."
+          columns={BACKFILL_COLUMNS}
+        />
       </div>
     </div>
   );

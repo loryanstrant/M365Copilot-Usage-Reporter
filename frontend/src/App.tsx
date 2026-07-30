@@ -4,6 +4,7 @@ import { useAuth } from "./auth/AuthContext";
 import { FiltersProvider } from "./filters/FiltersContext";
 import AboutPage from "./pages/AboutPage";
 import BackfillPage from "./pages/BackfillPage";
+import BriefingPage from "./pages/BriefingPage";
 import LaggardsPage from "./pages/LaggardsPage";
 import LeaderboardsPage from "./pages/LeaderboardsPage";
 import LicensesPage from "./pages/LicensesPage";
@@ -33,6 +34,7 @@ export default function App() {
       <Layout>
         <Routes>
           <Route path="/" element={<OverviewPage />} />
+          <Route path="/briefing" element={<BriefingPage />} />
           <Route path="/usage" element={<UsagePage />} />
           <Route path="/locations" element={<LocationsPage />} />
           <Route path="/leaderboards" element={<LeaderboardsPage />} />

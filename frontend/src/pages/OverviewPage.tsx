@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Area,
   AreaChart,
   Bar,
   BarChart,
+  CartesianGrid,
   Cell,
   Legend,
   Pie,
@@ -22,10 +23,12 @@ import type {
   NamedCount,
 } from "../api/types";
 import ChartCard from "../components/ChartCard";
+import ChartTooltip from "../components/ChartTooltip";
 import { CHART_COLORS, barGradId, gradId } from "../components/chartTheme";
+import { AppAxisTick } from "../components/AppLabel";
 import FilterBar from "../components/FilterBar";
 import KpiCard from "../components/KpiCard";
-import { filterDeps, metricsQuery, useFilters } from "../filters/FiltersContext";
+import { filterDeps, metricLabel, metricsQuery, useFilters } from "../filters/FiltersContext";
 
 const PIE_COLORS = CHART_COLORS;
 const BAR_COLOR = "#3b6ef5";
@@ -38,6 +41,15 @@ interface ChatTypeData {
 
 function pct(value: number): string {
   return `${Math.round(value * 100)}%`;
+}
+
+// "2025-09" -> "Sep 2025" for the month axis.
+function monthLabel(key: string): string {
+  const [y, m] = key.split("-").map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString(undefined, {
+    month: "short",
+    year: "numeric",
+  });
 }
 
 export default function OverviewPage() {
@@ -74,6 +86,30 @@ export default function OverviewPage() {
   }, [filterDeps(filters)]);
 
   const hasData = (summary?.prompts ?? 0) > 0;
+  const m = filters.metric;
+  const mLabel = metricLabel(m);
+  // Overview keeps the app chart to the top 5 surfaces by the selected measure;
+  // the full per-app breakdown lives on the Usage page.
+  const topApps = useMemo(
+    () => [...apps].sort((a, b) => b[m] - a[m]).slice(0, 5),
+    [apps, m],
+  );
+  // Usage over time is aggregated to year+month so a long history stays legible.
+  const monthly = useMemo(() => {
+    const byMonth = new Map<
+      string,
+      { key: string; label: string; prompts: number; conversations: number }
+    >();
+    for (const d of daily) {
+      const key = d.date.slice(0, 7); // YYYY-MM
+      const cur =
+        byMonth.get(key) ?? { key, label: monthLabel(key), prompts: 0, conversations: 0 };
+      cur.prompts += d.prompts;
+      cur.conversations += d.conversations;
+      byMonth.set(key, cur);
+    }
+    return [...byMonth.values()].sort((a, b) => a.key.localeCompare(b.key));
+  }, [daily]);
   const activityData = activity
     ? [
         { name: "Active", value: activity.active },
@@ -82,11 +118,11 @@ export default function OverviewPage() {
     : [];
   const convLocData = (splits?.conversation_locations ?? []).map((r) => ({
     name: r.name ?? "Unknown",
-    value: r.prompts,
+    value: r[m],
   }));
   const chatTypeData = (splits?.chat_types ?? []).map((r) => ({
     name: r.name ?? "Unknown",
-    value: r.prompts,
+    value: r[m],
   }));
 
   return (
@@ -132,21 +168,32 @@ export default function OverviewPage() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         <ChartCard
-          title="Prompts over time"
-          subtitle="Daily prompt volume"
+          title="Usage over time"
+          subtitle="Prompts and conversations per month"
           className="lg:col-span-2"
         >
           <ResponsiveContainer width="100%" height={260}>
-            <AreaChart data={daily} margin={{ left: -20, right: 8, top: 8 }}>
-              <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="#94a3b8" tickMargin={8} />
+            <AreaChart data={monthly} margin={{ left: -20, right: 8, top: 8 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" opacity={0.35} />
+              <XAxis dataKey="label" tick={{ fontSize: 11 }} stroke="#94a3b8" tickMargin={8} />
               <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" allowDecimals={false} />
-              <Tooltip />
+              <Tooltip content={<ChartTooltip />} />
+              <Legend />
               <Area
                 type="monotone"
                 dataKey="prompts"
+                name="Prompts"
                 stroke={BAR_COLOR}
                 fill={`url(#${gradId(0)})`}
                 strokeWidth={2.5}
+              />
+              <Area
+                type="monotone"
+                dataKey="conversations"
+                name="Conversations"
+                stroke="#06b6d4"
+                fill={`url(#${gradId(5)})`}
+                strokeWidth={2}
               />
             </AreaChart>
           </ResponsiveContainer>
@@ -161,14 +208,14 @@ export default function OverviewPage() {
                 ))}
               </Pie>
               <Legend />
-              <Tooltip />
+              <Tooltip content={<ChartTooltip />} />
             </PieChart>
           </ResponsiveContainer>
         </ChartCard>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <ChartCard title="Where prompts happen" subtitle="App vs Chat">
+        <ChartCard title={`Where ${mLabel.toLowerCase()} happen`} subtitle="App vs Chat">
           <ResponsiveContainer width="100%" height={240}>
             <PieChart>
               <Pie data={convLocData} dataKey="value" nameKey="name" outerRadius={80}>
@@ -177,7 +224,7 @@ export default function OverviewPage() {
                 ))}
               </Pie>
               <Legend />
-              <Tooltip />
+              <Tooltip content={<ChartTooltip />} />
             </PieChart>
           </ResponsiveContainer>
         </ChartCard>
@@ -191,18 +238,18 @@ export default function OverviewPage() {
                 ))}
               </Pie>
               <Legend />
-              <Tooltip />
+              <Tooltip content={<ChartTooltip />} />
             </PieChart>
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="Usage by app" subtitle="Prompts per surface">
+        <ChartCard title="Top 5 apps" subtitle={`${mLabel} per surface`}>
           <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={apps} margin={{ left: -20, right: 8, top: 8 }}>
-              <XAxis dataKey="app_name" tick={{ fontSize: 10 }} stroke="#94a3b8" interval={0} angle={-30} textAnchor="end" height={60} />
+            <BarChart data={topApps} margin={{ left: -20, right: 8, top: 8 }}>
+              <XAxis dataKey="app_name" tick={<AppAxisTick />} stroke="#94a3b8" interval={0} height={44} />
               <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" allowDecimals={false} />
-              <Tooltip />
-              <Bar dataKey="prompts" fill={`url(#${barGradId(0)})`} radius={[6, 6, 0, 0]} />
+              <Tooltip content={<ChartTooltip />} />
+              <Bar dataKey={m} name={mLabel} fill={`url(#${barGradId(0)})`} radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
