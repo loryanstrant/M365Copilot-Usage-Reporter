@@ -20,6 +20,40 @@ database password and encryption keys are generated for you. When the deployment
 > (`m365copilot-usage-reporter/api` and `.../worker`) to **Public** once, so Container Apps can pull
 > them anonymously. See [`docs/deploy.md`](docs/deploy.md) for the full walkthrough.
 
+## Screenshots
+
+### Overview
+
+At-a-glance KPIs, usage over time (prompts vs conversations, by month), and the top surfaces.
+
+![Overview](docs/screenshots/overview.png)
+
+### Executive briefing
+
+A plain-English, auto-generated snapshot with period-over-period deltas, highlights, watch-outs, and
+suggested actions.
+
+![Executive briefing](docs/screenshots/briefing.png)
+
+### Usage
+
+Per-app monthly trends (with trendlines and product logos), engagement distribution, and sortable
+per-app / per-user tables.
+
+![Usage](docs/screenshots/usage.png)
+
+### Leaderboards
+
+Top departments, offices, and managers, plus the most active users by prompts and conversations.
+
+![Leaderboards](docs/screenshots/leaderboards.png)
+
+### Dark mode
+
+Every page supports a light and dark theme.
+
+![Overview in dark mode](docs/screenshots/overview-dark.png)
+
 ## Terminology
 
 Microsoft Graph uses "session" and "interaction". This project renames them everywhere:
