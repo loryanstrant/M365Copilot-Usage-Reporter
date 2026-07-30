@@ -1,0 +1,118 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/0.1.2-preview/CreateUIDefinition.MultiVm.json#",
+  "handler": "Microsoft.Azure.CreateUIDef",
+  "version": "0.1.2-preview",
+  "parameters": {
+    "config": {
+      "isWizard": false,
+      "basics": {
+        "description": "Deploy the **M365 Copilot Usage Reporter** to Azure Container Apps. It pulls prebuilt public images, provisions a PostgreSQL flexible server, and serves the dashboard on a public HTTPS endpoint. You only need to set an admin password.",
+        "location": {
+          "label": "Region",
+          "toolTip": "Azure region for all resources.",
+          "resourceTypes": [
+            "Microsoft.App/managedEnvironments",
+            "Microsoft.DBforPostgreSQL/flexibleServers"
+          ]
+        }
+      }
+    },
+    "basics": [
+      {
+        "name": "namePrefix",
+        "type": "Microsoft.Common.TextBox",
+        "label": "Resource name prefix",
+        "defaultValue": "copilot",
+        "toolTip": "Short prefix (letters and numbers) used to name every resource.",
+        "constraints": {
+          "required": true,
+          "validations": [
+            {
+              "regex": "^[a-z0-9]{2,12}$",
+              "message": "2-12 lowercase letters or numbers."
+            }
+          ]
+        }
+      }
+    ],
+    "steps": [
+      {
+        "name": "app",
+        "label": "Application",
+        "elements": [
+          {
+            "name": "adminUsername",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Dashboard admin username",
+            "defaultValue": "admin",
+            "toolTip": "Username for the first sign-in to the dashboard.",
+            "constraints": {
+              "required": true,
+              "validations": [
+                {
+                  "regex": "^[A-Za-z0-9._-]{3,32}$",
+                  "message": "3-32 characters: letters, numbers, dot, underscore or hyphen."
+                }
+              ]
+            }
+          },
+          {
+            "name": "adminPassword",
+            "type": "Microsoft.Common.PasswordBox",
+            "label": {
+              "password": "Dashboard admin password",
+              "confirmPassword": "Confirm password"
+            },
+            "toolTip": "Password for the first sign-in. Use at least 8 characters with a mix of types.",
+            "constraints": {
+              "required": true,
+              "regex": "^.{8,}$",
+              "validationMessage": "At least 8 characters."
+            },
+            "options": {
+              "hideConfirmation": false
+            }
+          }
+        ]
+      },
+      {
+        "name": "advanced",
+        "label": "Advanced",
+        "elements": [
+          {
+            "name": "advancedInfo",
+            "type": "Microsoft.Common.InfoBox",
+            "visible": true,
+            "options": {
+              "icon": "Info",
+              "text": "Defaults are fine for most deployments. The image tag controls which published build is deployed."
+            }
+          },
+          {
+            "name": "imageTag",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Image tag",
+            "defaultValue": "latest",
+            "toolTip": "Container image tag to deploy (e.g. 'latest' or a version tag).",
+            "constraints": {
+              "required": true,
+              "validations": [
+                {
+                  "regex": "^[A-Za-z0-9._-]{1,64}$",
+                  "message": "A valid image tag."
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ],
+    "outputs": {
+      "location": "[location()]",
+      "namePrefix": "[basics('namePrefix')]",
+      "adminUsername": "[steps('app').adminUsername]",
+      "adminPassword": "[steps('app').adminPassword]",
+      "imageTag": "[steps('advanced').imageTag]"
+    }
+  }
+}
