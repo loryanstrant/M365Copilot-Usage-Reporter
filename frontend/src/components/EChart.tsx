@@ -33,13 +33,24 @@ export default function EChart({
   useEffect(() => {
     if (!chart.current) return;
     const axisColor = theme === "dark" ? "#94a3b8" : "#475569";
-    chart.current.setOption(
-      {
-        textStyle: { color: axisColor, fontFamily: "inherit" },
-        ...option,
+    // A single tooltip style matching the Recharts tooltip, theme-aware.
+    const tooltipTheme = {
+      backgroundColor: theme === "dark" ? "#1e293b" : "#ffffff",
+      borderColor: theme === "dark" ? "#334155" : "#e2e8f0",
+      borderWidth: 1,
+      textStyle: {
+        color: theme === "dark" ? "#e2e8f0" : "#334155",
+        fontSize: 12,
+        fontFamily: "inherit",
       },
-      true,
-    );
+      extraCssText: "border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.18);",
+    };
+    const merged: echarts.EChartsOption = {
+      textStyle: { color: axisColor, fontFamily: "inherit" },
+      ...option,
+      tooltip: { ...tooltipTheme, ...(option.tooltip as object) },
+    };
+    chart.current.setOption(merged, true);
   }, [option, theme]);
 
   return <div ref={ref} style={{ width: "100%", height }} />;

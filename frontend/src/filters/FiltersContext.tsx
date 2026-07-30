@@ -22,9 +22,14 @@ interface FilterState {
   userSearch: string;
 }
 
+// The measure every volume chart plots. Toggled globally via the FilterBar.
+export type Metric = "prompts" | "conversations";
+
 export interface Filters extends FilterState {
   options: FilterOptions | null;
+  metric: Metric;
   set: (patch: Partial<FilterState>) => void;
+  setMetric: (metric: Metric) => void;
   setRelative: (days: number) => void;
   reset: () => void;
   activeCount: number;
@@ -52,6 +57,7 @@ function isoDaysAgo(days: number): string {
 
 export function FiltersProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<FilterState>(EMPTY);
+  const [metric, setMetric] = useState<Metric>("prompts");
   const [options, setOptions] = useState<FilterOptions | null>(null);
 
   useEffect(() => {
@@ -79,8 +85,8 @@ export function FiltersProvider({ children }: { children: ReactNode }) {
       state.managerIds.length +
       state.chatTypes.length +
       state.conversationLocations.length;
-    return { ...state, options, set, setRelative, reset, activeCount };
-  }, [state, options]);
+    return { ...state, options, metric, set, setMetric, setRelative, reset, activeCount };
+  }, [state, options, metric]);
 
   return <FiltersContext.Provider value={value}>{children}</FiltersContext.Provider>;
 }
@@ -110,4 +116,9 @@ export function metricsQuery(f: Filters): string {
 /** A dependency key so effects re-run when any filter changes. */
 export function filterDeps(f: Filters): string {
   return metricsQuery(f);
+}
+
+/** Human-readable label for a measure (used in chart titles and series names). */
+export function metricLabel(metric: Metric): string {
+  return metric === "prompts" ? "Prompts" : "Conversations";
 }

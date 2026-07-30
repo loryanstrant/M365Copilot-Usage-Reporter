@@ -2,8 +2,19 @@ import { useEffect, useState } from "react";
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api } from "../api/client";
 import { downloadCsv } from "../api/csv";
-import type { LaggardsData } from "../api/types";
+import type { LaggardRow, LaggardsData } from "../api/types";
 import ChartCard from "../components/ChartCard";
+import ChartTooltip from "../components/ChartTooltip";
+import DataTable, { type Column } from "../components/DataTable";
+
+const LAGGARD_COLUMNS: Column<LaggardRow>[] = [
+  { key: "user", header: "User", type: "text", accessor: (u) => u.display_name },
+  { key: "department", header: "Department", type: "text", accessor: (u) => u.department, render: (u) => u.department ?? "—" },
+  { key: "office", header: "Office", type: "text", accessor: (u) => u.office_location, render: (u) => u.office_location ?? "—" },
+  { key: "prompts_30d", header: "Prompts (30d)", type: "number", accessor: (u) => u.prompts_30d },
+  { key: "last_use", header: "Last use", type: "date", accessor: (u) => u.last_use, render: (u) => u.last_use ?? "never" },
+  { key: "days_since_last", header: "Days since last", type: "number", accessor: (u) => u.days_since_last, render: (u) => u.days_since_last ?? "—" },
+];
 
 export default function LaggardsPage() {
   const [data, setData] = useState<LaggardsData | null>(null);
@@ -71,56 +82,13 @@ export default function LaggardsPage() {
             Licensed users by inactivity
           </h3>
         </div>
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-xs uppercase tracking-wide text-slate-400">
-                {["User", "Department", "Office", "Prompts (30d)", "Last use", "Days since last"].map(
-                  (h) => (
-                    <th key={h} className="px-5 py-3 font-medium">
-                      {h}
-                    </th>
-                  ),
-                )}
-              </tr>
-            </thead>
-            <tbody>
-              {users.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-5 py-6 text-center text-slate-400">
-                    No data yet.
-                  </td>
-                </tr>
-              ) : (
-                users.map((u) => (
-                  <tr
-                    key={u.user_id}
-                    className={`border-t border-slate-100 dark:border-slate-700 ${u.inactive ? "bg-amber-50/40 dark:bg-amber-900/10" : ""}`}
-                  >
-                    <td className="px-5 py-3 font-medium text-slate-800 dark:text-slate-100">
-                      {u.display_name}
-                    </td>
-                    <td className="px-5 py-3 text-slate-600 dark:text-slate-300">
-                      {u.department ?? "—"}
-                    </td>
-                    <td className="px-5 py-3 text-slate-600 dark:text-slate-300">
-                      {u.office_location ?? "—"}
-                    </td>
-                    <td className="px-5 py-3 tabular-nums text-slate-600 dark:text-slate-300">
-                      {u.prompts_30d}
-                    </td>
-                    <td className="px-5 py-3 tabular-nums text-slate-600 dark:text-slate-300">
-                      {u.last_use ?? "never"}
-                    </td>
-                    <td className="px-5 py-3 tabular-nums text-slate-600 dark:text-slate-300">
-                      {u.days_since_last ?? "—"}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          rows={users}
+          getRowKey={(u) => u.user_id}
+          initialSort={{ key: "days_since_last", dir: "desc" }}
+          rowClassName={(u) => (u.inactive ? "bg-amber-50/40 dark:bg-amber-900/10" : "")}
+          columns={LAGGARD_COLUMNS}
+        />
       </div>
     </div>
   );
@@ -145,7 +113,7 @@ function IdleBar({
           </defs>
           <XAxis type="number" tick={{ fontSize: 11 }} stroke="#94a3b8" allowDecimals={false} />
           <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} stroke="#94a3b8" width={110} />
-          <Tooltip cursor={{ fill: "rgba(245,158,11,0.08)" }} />
+          <Tooltip cursor={{ fill: "rgba(245,158,11,0.08)" }} content={<ChartTooltip />} />
           <Bar dataKey="inactive_users" radius={[0, 6, 6, 0]} fill="url(#idleGrad)">
             {rows.map((_, i) => (
               <Cell key={i} fill="url(#idleGrad)" />

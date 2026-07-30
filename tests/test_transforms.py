@@ -160,6 +160,33 @@ def test_transform_interaction_drops_admin_center():
     assert transform_interaction(raw, user_id="u") is None
 
 
+def test_transform_interaction_drops_ai_response():
+    """Copilot's own responses must never be stored or counted as usage."""
+    raw = {
+        "id": "r1",
+        "sessionId": "conv-1",
+        "appClass": "IPM.SkypeTeams.Message.Copilot.BizChat",
+        "conversationType": "bizchat",
+        "createdDateTime": "2026-07-01T09:30:05Z",
+        "interactionType": "aiResponse",
+    }
+    assert transform_interaction(raw, user_id="user-1") is None
+
+
+def test_transform_interaction_keeps_user_prompt():
+    raw = {
+        "id": "p1",
+        "sessionId": "conv-1",
+        "appClass": "IPM.SkypeTeams.Message.Copilot.BizChat",
+        "conversationType": "bizchat",
+        "createdDateTime": "2026-07-01T09:30:00Z",
+        "interactionType": "userPrompt",
+    }
+    row = transform_interaction(raw, user_id="user-1")
+    assert row is not None
+    assert row["prompt_id"] == "p1"
+
+
 # --- is_included_entra_user ---------------------------------------------
 def _member(**overrides):
     base = {

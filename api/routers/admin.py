@@ -232,7 +232,13 @@ async def status(session: AsyncSession = Depends(get_session)) -> StatusOut:
     prompts = await session.scalar(select(func.count()).select_from(Prompt)) or 0
     conversations = (
         await session.scalar(
-            select(func.count(func.distinct(Prompt.conversation_id)))
+            select(
+                func.count(
+                    func.distinct(
+                        func.coalesce(Prompt.conversation_id, Prompt.prompt_id)
+                    )
+                )
+            )
         )
         or 0
     )

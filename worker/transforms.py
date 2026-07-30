@@ -19,6 +19,12 @@ APP_PREFIX = "IPM.SkypeTeams.Message.Copilot."
 # App identifier that must never appear in the dataset.
 EXCLUDED_APP = "M365AdminCenter"
 
+# Graph returns two rows per exchange: the human 'userPrompt' and Copilot's
+# 'aiResponse'. Only the human prompt is a genuine record of usage, so responses
+# are dropped at ingest and never stored or counted. (Ref: aiInteraction schema —
+# interactionType is one of userPrompt | aiResponse | unknownFutureValue.)
+AI_RESPONSE_TYPE = "aiResponse"
+
 # Normalisation of the raw (prefix-stripped) app identifier to a display name.
 _APP_NAME_MAP = {
     "bizchat": "Copilot Chat",
@@ -148,6 +154,10 @@ def transform_interaction(
     """
     app_class = strip_app_prefix(raw.get("appClass"))
     if app_class == EXCLUDED_APP:
+        return None
+
+    # Drop Copilot's own responses — only the human prompt counts as usage.
+    if raw.get("interactionType") == AI_RESPONSE_TYPE:
         return None
 
     conversation_type = raw.get("conversationType")

@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type * as echarts from "echarts";
 import {
-  Area,
-  AreaChart,
   Bar,
   BarChart,
   Cell,
@@ -17,14 +15,16 @@ import {
 import { api } from "../api/client";
 import type { BreakdownRow, LocationsData, NamedCount } from "../api/types";
 import ChartCard from "../components/ChartCard";
+import ChartTooltip from "../components/ChartTooltip";
 import EChart from "../components/EChart";
 import FilterBar from "../components/FilterBar";
-import { filterDeps, metricsQuery, useFilters } from "../filters/FiltersContext";
+import { filterDeps, metricLabel, metricsQuery, useFilters, type Metric } from "../filters/FiltersContext";
 
 const COLORS = ["#2f5ae0", "#22c55e", "#f59e0b", "#a855f7", "#ef4444", "#06b6d4"];
 
 export default function LocationsPage() {
   const filters = useFilters();
+  const metric = filters.metric;
   const [data, setData] = useState<LocationsData | null>(null);
   const [sun, setSun] = useState<BreakdownRow[]>([]);
 
@@ -46,31 +46,13 @@ export default function LocationsPage() {
     })();
   }, [filterDeps(filters)]);
 
-  // Pivot daily_by_chat_type -> wide rows for the streamgraph.
-  const { streamData, chatKeys } = useMemo(() => {
-    const rows = data?.daily_by_chat_type ?? [];
-    const keys = Array.from(new Set(rows.map((r) => r.chat_type)));
-    const byDate = new Map<string, Record<string, number | string>>();
-    for (const r of rows) {
-      const row = byDate.get(r.date) ?? { date: r.date };
-      row[r.chat_type] = (Number(row[r.chat_type] ?? 0) || 0) + r.prompts;
-      byDate.set(r.date, row);
-    }
-    return {
-      streamData: Array.from(byDate.values()).sort((a, b) =>
-        String(a.date).localeCompare(String(b.date)),
-      ),
-      chatKeys: keys,
-    };
-  }, [data]);
-
   // Build a two-level sunburst: app → chat type.
   const sunOption = useMemo(() => {
     const byApp = new Map<string, { name: string; value: number }[]>();
     for (const r of sun) {
       const app = r.d1 ?? "Unknown";
       const arr = byApp.get(app) ?? [];
-      arr.push({ name: r.d2 ?? "Unknown", value: r.prompts });
+      arr.push({ name: r.d2 ?? "Unknown", value: r[metric] });
       byApp.set(app, arr);
     }
     const data = [...byApp.entries()].map(([name, children], i) => ({
@@ -96,7 +78,7 @@ export default function LocationsPage() {
         },
       ],
     } as echarts.EChartsOption;
-  }, [sun]);
+  }, [sun, metric]);
 
   return (
     <div className="space-y-8">
@@ -109,28 +91,6 @@ export default function LocationsPage() {
 
       <FilterBar />
 
-      <ChartCard title="Chat types over time" subtitle="Daily prompt volume by chat type (streamgraph)">
-        <ResponsiveContainer width="100%" height={300}>
-          <AreaChart data={streamData} stackOffset="silhouette" margin={{ left: -20, right: 8, top: 8 }}>
-            <XAxis dataKey="date" tick={{ fontSize: 11 }} stroke="#94a3b8" tickMargin={8} />
-            <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" />
-            <Tooltip />
-            <Legend />
-            {chatKeys.map((k, i) => (
-              <Area
-                key={k}
-                type="monotone"
-                dataKey={k}
-                stackId="1"
-                stroke={COLORS[i % COLORS.length]}
-                fill={COLORS[i % COLORS.length]}
-                fillOpacity={0.7}
-              />
-            ))}
-          </AreaChart>
-        </ResponsiveContainer>
-      </ChartCard>
-
       <div className="grid gap-6 lg:grid-cols-2">
         <ChartCard title="App → chat type" subtitle="How each surface breaks down (sunburst)">
           {sun.length === 0 ? (
@@ -139,19 +99,19 @@ export default function LocationsPage() {
             <EChart option={sunOption} height={340} />
           )}
         </ChartCard>
-        <SplitPie title="Conversation location" subtitle="App vs Chat" rows={data?.conversation_locations ?? []} />
+        <SplitPie title="Conversation location" subtitle="App vs Chat" rows={data?.conversation_locations ?? []} metric={metric} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <LocBar title="Top Teams locations" rows={data?.teams_locations ?? []} />
-        <LocBar title="Top file locations" rows={data?.file_locations ?? []} />
+        <LocBar title="Top Teams locations" rows={data?.teams_locations ?? []} metric={metric} />
+        <LocBar title="Top file locations" rows={data?.file_locations ?? []} metric={metric} />
       </div>
     </div>
   );
 }
 
-function SplitPie({ title, subtitle, rows }: { title: string; subtitle: string; rows: NamedCount[] }) {
-  const d = rows.map((r) => ({ name: r.name ?? "Unknown", value: r.prompts }));
+function SplitPie({ title, subtitle, rows, metric }: { title: string; subtitle: string; rows: NamedCount[]; metric: Metric }) {
+  const d = rows.map((r) => ({ name: r.name ?? "Unknown", value: r[metric] }));
   return (
     <ChartCard title={title} subtitle={subtitle}>
       <ResponsiveContainer width="100%" height={260}>
@@ -162,17 +122,17 @@ function SplitPie({ title, subtitle, rows }: { title: string; subtitle: string; 
             ))}
           </Pie>
           <Legend />
-          <Tooltip />
+          <Tooltip content={<ChartTooltip />} />
         </PieChart>
       </ResponsiveContainer>
     </ChartCard>
   );
 }
 
-function LocBar({ title, rows }: { title: string; rows: NamedCount[] }) {
-  const d = rows.map((r) => ({ name: r.name ?? "—", prompts: r.prompts }));
+function LocBar({ title, rows, metric }: { title: string; rows: NamedCount[]; metric: Metric }) {
+  const d = rows.map((r) => ({ name: r.name ?? "—", value: r[metric] }));
   return (
-    <ChartCard title={title} subtitle="Prompts">
+    <ChartCard title={title} subtitle={metricLabel(metric)}>
       {d.length === 0 ? (
         <div className="py-10 text-center text-sm text-slate-400">No data.</div>
       ) : (
@@ -186,8 +146,8 @@ function LocBar({ title, rows }: { title: string; rows: NamedCount[] }) {
             </defs>
             <XAxis type="number" tick={{ fontSize: 11 }} stroke="#94a3b8" allowDecimals={false} />
             <YAxis type="category" dataKey="name" tick={{ fontSize: 10 }} stroke="#94a3b8" width={140} />
-            <Tooltip cursor={{ fill: "rgba(59,110,245,0.06)" }} />
-            <Bar dataKey="prompts" fill="url(#locBarGrad)" radius={[0, 6, 6, 0]} />
+            <Tooltip cursor={{ fill: "rgba(59,110,245,0.06)" }} content={<ChartTooltip />} />
+            <Bar dataKey="value" name={metricLabel(metric)} fill="url(#locBarGrad)" radius={[0, 6, 6, 0]} />
           </BarChart>
         </ResponsiveContainer>
       )}

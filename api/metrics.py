@@ -34,6 +34,19 @@ def _days_since(value: date | None, today: date) -> int | None:
     return (today - value).days if value is not None else None
 
 
+def _conv_key():
+    """Conversation identity for distinct-counting.
+
+    A conversation is the Graph ``sessionId``. When a genuine human prompt has no
+    session (e.g. a one-shot Copilot action in Word/Excel), ``sessionId`` is NULL —
+    and ``COUNT(DISTINCT sessionId)`` silently *drops* those rows, so a day of 500
+    session-less prompts could collapse to a handful of conversations and produce
+    impossible prompt:conversation ratios. Falling back to the prompt's own id
+    counts each session-less prompt as its own conversation (a no-op whenever a
+    real session id is present)."""
+    return func.coalesce(Prompt.conversation_id, Prompt.prompt_id)
+
+
 def copilot_score_from_count(prompt_count: int) -> int:
     for threshold, score in _SCORE_LADDER:
         if prompt_count >= threshold:
@@ -66,7 +79,7 @@ async def summary(
     prompts = (await session.scalar(_prompt_query(f, func.count()))) or 0
     conversations = (
         await session.scalar(
-            _prompt_query(f, func.count(distinct(Prompt.conversation_id)))
+            _prompt_query(f, func.count(distinct(_conv_key())))
         )
     ) or 0
     active_users = (
@@ -132,7 +145,7 @@ async def daily(
             f,
             Prompt.prompt_date.label("date"),
             func.count().label("prompts"),
-            func.count(distinct(Prompt.conversation_id)).label("conversations"),
+            func.count(distinct(_conv_key())).label("conversations"),
         )
         .where(Prompt.prompt_date.is_not(None))
         .group_by(Prompt.prompt_date)
@@ -140,6 +153,34 @@ async def daily(
     )
     return [
         {
+            "date": r.date.isoformat() if r.date else None,
+            "prompts": r.prompts,
+            "conversations": r.conversations,
+        }
+        for r in (await session.execute(q)).all()
+    ]
+
+
+async def by_app_daily(
+    session: AsyncSession, *, filters: MetricFilters | None = None
+) -> list[dict[str, Any]]:
+    """Prompts and conversations per app per day (per-app trend small multiples)."""
+    f = filters or MetricFilters()
+    q = (
+        _prompt_query(
+            f,
+            Prompt.app_name.label("app_name"),
+            Prompt.prompt_date.label("date"),
+            func.count().label("prompts"),
+            func.count(distinct(_conv_key())).label("conversations"),
+        )
+        .where(Prompt.prompt_date.is_not(None), Prompt.app_name.is_not(None))
+        .group_by(Prompt.app_name, Prompt.prompt_date)
+        .order_by(Prompt.app_name, Prompt.prompt_date)
+    )
+    return [
+        {
+            "app_name": r.app_name,
             "date": r.date.isoformat() if r.date else None,
             "prompts": r.prompts,
             "conversations": r.conversations,
@@ -162,7 +203,7 @@ async def by_app(
             f,
             Prompt.app_name.label("app_name"),
             func.count().label("prompts"),
-            func.count(distinct(Prompt.conversation_id)).label("conversations"),
+            func.count(distinct(_conv_key())).label("conversations"),
             func.count(distinct(Prompt.user_id)).label("users"),
             func.min(Prompt.prompt_date).label("first_use"),
             func.max(Prompt.prompt_date).label("last_use"),
@@ -206,7 +247,7 @@ async def by_user(
             EntraUser.manager_id.label("manager_id"),
             EntraUser.has_copilot_license.label("has_copilot_license"),
             func.count().label("prompts"),
-            func.count(distinct(Prompt.conversation_id)).label("conversations"),
+            func.count(distinct(_conv_key())).label("conversations"),
             func.min(Prompt.prompt_date).label("first_use"),
             func.max(Prompt.prompt_date).label("last_use"),
         )
@@ -302,6 +343,122 @@ async def active_inactive(
     return {"active": active, "inactive": max(licensed - active, 0), "licensed": licensed}
 
 
+async def briefing(
+    session: AsyncSession, *, today: date | None = None, window_days: int = 30
+) -> dict[str, Any]:
+    """Executive snapshot: the current ``window_days`` period vs the one before
+    it, plus leading surfaces and departments. Feeds the narrated briefing page.
+    """
+    today = today or date.today()
+    cur_start = today - timedelta(days=window_days)
+    prev_start = today - timedelta(days=2 * window_days)
+
+    async def _counts(lo: date, hi: date | None) -> dict[str, int]:
+        conds: list[Any] = [Prompt.prompt_date >= lo]
+        if hi is not None:
+            conds.append(Prompt.prompt_date < hi)
+        prompts = (await session.scalar(select(func.count()).where(*conds))) or 0
+        conversations = (
+            await session.scalar(
+                select(func.count(distinct(_conv_key()))).where(*conds)
+            )
+        ) or 0
+        active = (
+            await session.scalar(
+                select(func.count(distinct(Prompt.user_id))).where(*conds)
+            )
+        ) or 0
+        return {
+            "prompts": int(prompts),
+            "conversations": int(conversations),
+            "active_users": int(active),
+        }
+
+    current = await _counts(cur_start, None)
+    previous = await _counts(prev_start, cur_start)
+
+    licensed_users = (
+        await session.scalar(select(func.count()).select_from(LicensedUser))
+    ) or 0
+    active_licensed = (
+        await session.scalar(
+            select(func.count(distinct(Prompt.user_id))).where(
+                Prompt.prompt_date >= cur_start,
+                Prompt.user_id.in_(select(LicensedUser.user_id)),
+            )
+        )
+    ) or 0
+    inactive_users = max(int(licensed_users) - int(active_licensed), 0)
+    total_prompts = (
+        await session.scalar(select(func.count()).select_from(Prompt))
+    ) or 0
+
+    cur_by_app = dict(
+        (
+            await session.execute(
+                select(Prompt.app_name, func.count())
+                .where(Prompt.prompt_date >= cur_start, Prompt.app_name.is_not(None))
+                .group_by(Prompt.app_name)
+            )
+        ).all()
+    )
+    prev_by_app = dict(
+        (
+            await session.execute(
+                select(Prompt.app_name, func.count())
+                .where(
+                    Prompt.prompt_date >= prev_start,
+                    Prompt.prompt_date < cur_start,
+                    Prompt.app_name.is_not(None),
+                )
+                .group_by(Prompt.app_name)
+            )
+        ).all()
+    )
+    top_apps = [
+        {
+            "name": name,
+            "prompts": int(cnt),
+            "prev_prompts": int(prev_by_app.get(name, 0)),
+        }
+        for name, cnt in sorted(
+            cur_by_app.items(), key=lambda kv: kv[1], reverse=True
+        )[:5]
+    ]
+
+    dept_rows = (
+        await session.execute(
+            select(EntraUser.department, func.count())
+            .select_from(Prompt)
+            .join(EntraUser, EntraUser.user_id == Prompt.user_id)
+            .where(Prompt.prompt_date >= cur_start, EntraUser.department.is_not(None))
+            .group_by(EntraUser.department)
+            .order_by(func.count().desc())
+            .limit(3)
+        )
+    ).all()
+    top_departments = [{"name": d, "prompts": int(c)} for d, c in dept_rows]
+
+    return {
+        "window_days": window_days,
+        "period_start": cur_start.isoformat(),
+        "period_end": today.isoformat(),
+        "previous_period_start": prev_start.isoformat(),
+        "current": current,
+        "previous": previous,
+        "licensed_users": int(licensed_users),
+        "active_users": current["active_users"],
+        "adoption_rate": round(int(active_licensed) / int(licensed_users), 4)
+        if licensed_users
+        else 0.0,
+        "inactive_users": inactive_users,
+        "copilot_score": copilot_score_from_count(int(total_prompts)),
+        "total_prompts": int(total_prompts),
+        "top_apps": top_apps,
+        "top_departments": top_departments,
+    }
+
+
 async def _grouped_counts(
     session: AsyncSession,
     column: Any,
@@ -316,7 +473,7 @@ async def _grouped_counts(
             f,
             column.label("name"),
             func.count().label("prompts"),
-            func.count(distinct(Prompt.conversation_id)).label("conversations"),
+            func.count(distinct(_conv_key())).label("conversations"),
             join_user=join_user,
         )
         .where(column.is_not(None))
@@ -350,6 +507,7 @@ async def locations(
             Prompt.prompt_date.label("date"),
             Prompt.chat_type.label("chat_type"),
             func.count().label("prompts"),
+            func.count(distinct(_conv_key())).label("conversations"),
         )
         .where(Prompt.prompt_date.is_not(None))
         .group_by(Prompt.prompt_date, Prompt.chat_type)
@@ -360,6 +518,7 @@ async def locations(
             "date": r.date.isoformat() if r.date else None,
             "chat_type": r.chat_type or "Unknown",
             "prompts": r.prompts,
+            "conversations": r.conversations,
         }
         for r in (await session.execute(trend_q)).all()
     ]
@@ -408,6 +567,7 @@ async def leaderboard_rollups(
             EntraUser.manager_id.label("manager_id"),
             mgr.c.display_name.label("manager_name"),
             func.count().label("prompts"),
+            func.count(distinct(_conv_key())).label("conversations"),
         )
         .select_from(Prompt)
         .join(EntraUser, EntraUser.user_id == Prompt.user_id)
@@ -422,6 +582,7 @@ async def leaderboard_rollups(
             "name": r.manager_name or r.manager_id,
             "manager_id": r.manager_id,
             "prompts": r.prompts,
+            "conversations": r.conversations,
         }
         for r in (await session.execute(q)).all()
     ]
@@ -566,11 +727,12 @@ async def breakdown(
     limit1: int = 8,
     limit2: int = 8,
 ) -> list[dict[str, Any]]:
-    """Prompt counts grouped by two dimensions (for sunburst / radar).
+    """Prompt & conversation counts grouped by two dimensions (sunburst / radar).
 
     ``dim1``/``dim2`` are one of: app_name, chat_type, conversation_location
     (from prompts) or department, office_location (from entra_users). Returns
-    rows ``{d1, d2, prompts}`` limited to the top ``limit1`` d1 values.
+    rows ``{d1, d2, prompts, conversations}`` limited to the top ``limit1`` d1
+    values (ranked by prompt volume).
     """
     cols = {
         "app_name": Prompt.app_name,
@@ -591,6 +753,7 @@ async def breakdown(
             c1.label("d1"),
             c2.label("d2"),
             func.count().label("prompts"),
+            func.count(distinct(_conv_key())).label("conversations"),
             join_user=join_user,
         )
         .where(c1.is_not(None), c2.is_not(None))
@@ -598,7 +761,7 @@ async def breakdown(
         .order_by(func.count().desc())
     )
     rows = [
-        {"d1": r.d1, "d2": r.d2, "prompts": r.prompts}
+        {"d1": r.d1, "d2": r.d2, "prompts": r.prompts, "conversations": r.conversations}
         for r in (await session.execute(q)).all()
     ]
     # Keep only the top d1 values so the visual stays readable.
@@ -654,7 +817,7 @@ async def freshness(session: AsyncSession) -> dict[str, Any]:
     )
     prompts = (await session.scalar(select(func.count()).select_from(Prompt))) or 0
     conversations = (
-        await session.scalar(select(func.count(distinct(Prompt.conversation_id))))
+        await session.scalar(select(func.count(distinct(_conv_key()))))
     ) or 0
     licensed = (
         await session.scalar(select(func.count()).select_from(LicensedUser))

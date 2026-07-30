@@ -10,44 +10,72 @@ import {
 } from "recharts";
 import { api } from "../api/client";
 import { downloadCsv } from "../api/csv";
-import type { AppRow, BreakdownRow, CategoryRow, UserRow } from "../api/types";
+import type {
+  AppDailyPoint,
+  AppRow,
+  BreakdownRow,
+  CategoryRow,
+  UserRow,
+} from "../api/types";
 import ChartCard from "../components/ChartCard";
+import ChartTooltip from "../components/ChartTooltip";
 import { barGradId } from "../components/chartTheme";
+import AppLabel from "../components/AppLabel";
+import AppTrendGrid from "../components/AppTrendGrid";
+import DataTable, { type Column } from "../components/DataTable";
 import EChart from "../components/EChart";
 import FilterBar from "../components/FilterBar";
-import { filterDeps, metricsQuery, useFilters } from "../filters/FiltersContext";
+import { filterDeps, metricLabel, metricsQuery, useFilters } from "../filters/FiltersContext";
 import { useTheme } from "../theme/ThemeContext";
 
 const RADAR_COLORS = ["#2f5ae0", "#22c55e", "#f59e0b", "#a855f7", "#ef4444", "#06b6d4"];
 
-function fmtDate(value: string | null): string {
-  return value ?? "—";
-}
+const APP_COLUMNS: Column<AppRow>[] = [
+  { key: "app_name", header: "App", type: "text", accessor: (a) => a.app_name, render: (a) => <AppLabel name={a.app_name} /> },
+  { key: "prompts", header: "Prompts", type: "number", accessor: (a) => a.prompts },
+  { key: "conversations", header: "Conversations", type: "number", accessor: (a) => a.conversations },
+  { key: "avg", header: "Avg / conv.", type: "number", accessor: (a) => a.avg_prompts_per_conversation },
+  { key: "users", header: "Users", type: "number", accessor: (a) => a.users },
+  { key: "last_use", header: "Last use", type: "date", accessor: (a) => a.last_use, render: (a) => a.last_use ?? "—" },
+];
+
+const USER_COLUMNS: Column<UserRow>[] = [
+  { key: "user", header: "User", type: "text", accessor: (u) => u.display_name ?? u.user_id },
+  { key: "department", header: "Department", type: "text", accessor: (u) => u.department, render: (u) => u.department ?? "—" },
+  { key: "prompts", header: "Prompts", type: "number", accessor: (u) => u.prompts },
+  { key: "conversations", header: "Conversations", type: "number", accessor: (u) => u.conversations },
+  { key: "avg", header: "Avg / conv.", type: "number", accessor: (u) => u.avg_prompts_per_conversation },
+  { key: "days_since_last", header: "Days since last", type: "number", accessor: (u) => u.days_since_last, render: (u) => u.days_since_last ?? "—" },
+];
 
 export default function UsagePage() {
   const filters = useFilters();
   const { theme } = useTheme();
+  const metric = filters.metric;
   const [apps, setApps] = useState<AppRow[]>([]);
   const [users, setUsers] = useState<UserRow[]>([]);
   const [categories, setCategories] = useState<CategoryRow[]>([]);
   const [radar, setRadar] = useState<BreakdownRow[]>([]);
+  const [appDaily, setAppDaily] = useState<AppDailyPoint[]>([]);
 
   useEffect(() => {
     (async () => {
       try {
         const q = metricsQuery(filters);
-        const [a, u, c, r] = await Promise.all([
+        const [a, u, c, r, ad] = await Promise.all([
           api<AppRow[]>(`/metrics/by-app${q}`),
           api<UserRow[]>(`/metrics/by-user${q ? q + "&" : "?"}limit=200`),
           api<CategoryRow[]>("/metrics/categories"),
           api<BreakdownRow[]>(
             `/metrics/breakdown${q ? q + "&" : "?"}dim1=department&dim2=app_name`,
           ),
+          api<AppDailyPoint[]>(`/metrics/by-app-daily${q}`),
         ]);
         setApps(a);
         setUsers(u);
         setCategories(c);
         setRadar(r);
+        setAppDaily(ad);
       } catch {
         /* ignore */
       }
@@ -62,7 +90,7 @@ export default function UsagePage() {
     const gridColor = theme === "dark" ? "rgba(148,163,184,0.25)" : "rgba(100,116,139,0.25)";
     const apps = [...new Set(radar.map((r) => r.d2 ?? "Unknown"))].slice(0, 6);
     const depts = [...new Set(radar.map((r) => r.d1 ?? "Unknown"))].slice(0, 5);
-    const lookup = new Map(radar.map((r) => [`${r.d1}|${r.d2}`, r.prompts]));
+    const lookup = new Map(radar.map((r) => [`${r.d1}|${r.d2}`, r[metric]]));
     const maxByApp = apps.map((app) =>
       Math.max(1, ...depts.map((d) => lookup.get(`${d}|${app}`) ?? 0)),
     );
@@ -91,7 +119,7 @@ export default function UsagePage() {
         },
       ],
     } as echarts.EChartsOption;
-  }, [radar, theme]);
+  }, [radar, theme, metric]);
 
   function exportApps() {
     downloadCsv(
@@ -134,6 +162,13 @@ export default function UsagePage() {
 
       <FilterBar />
 
+      <ChartCard
+        title="Conversations & prompts by app"
+        subtitle={`Monthly trend per app · ${metricLabel(metric).toLowerCase()} trendline`}
+      >
+        <AppTrendGrid rows={appDaily} metric={metric} />
+      </ChartCard>
+
       <div className="grid gap-6 lg:grid-cols-2">
         <ChartCard
           title="Engagement distribution"
@@ -143,13 +178,13 @@ export default function UsagePage() {
             <BarChart data={categories} margin={{ left: -20, right: 8, top: 8 }}>
               <XAxis dataKey="category" tick={{ fontSize: 11 }} stroke="#94a3b8" />
               <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" allowDecimals={false} />
-              <Tooltip cursor={{ fill: "rgba(59,110,245,0.06)" }} />
+              <Tooltip cursor={{ fill: "rgba(59,110,245,0.06)" }} content={<ChartTooltip />} />
               <Bar dataKey="users" fill={`url(#${barGradId(0)})`} radius={[6, 6, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="Usage profile by department" subtitle="App mix across departments (radar)">
+        <ChartCard title="Usage profile by department" subtitle={`App mix across departments · ${metricLabel(metric)}`}>
           {radar.length === 0 ? (
             <div className="py-16 text-center text-sm text-slate-400">No data.</div>
           ) : (
@@ -167,16 +202,11 @@ export default function UsagePage() {
             Export CSV
           </button>
         </div>
-        <Table
-          head={["App", "Prompts", "Conversations", "Avg / conv.", "Users", "Last use"]}
-          rows={shownApps.map((a) => [
-            a.app_name ?? "—",
-            a.prompts,
-            a.conversations,
-            a.avg_prompts_per_conversation,
-            a.users,
-            fmtDate(a.last_use),
-          ])}
+        <DataTable
+          rows={shownApps}
+          getRowKey={(a) => a.app_name ?? "—"}
+          initialSort={{ key: "prompts", dir: "desc" }}
+          columns={APP_COLUMNS}
         />
       </div>
 
@@ -189,70 +219,13 @@ export default function UsagePage() {
             Export CSV
           </button>
         </div>
-        <Table
-          head={["User", "Department", "Prompts", "Conversations", "Avg / conv.", "Days since last"]}
-          rows={users.map((u) => [
-            u.display_name ?? u.user_id,
-            u.department ?? "—",
-            u.prompts,
-            u.conversations,
-            u.avg_prompts_per_conversation,
-            u.days_since_last ?? "—",
-          ])}
+        <DataTable
+          rows={users}
+          getRowKey={(u) => u.user_id}
+          initialSort={{ key: "prompts", dir: "desc" }}
+          columns={USER_COLUMNS}
         />
       </div>
-    </div>
-  );
-}
-
-function Table({
-  head,
-  rows,
-}: {
-  head: string[];
-  rows: (string | number)[][];
-}) {
-  return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead>
-          <tr className="text-left text-xs uppercase tracking-wide text-slate-400">
-            {head.map((h, i) => (
-              <th key={i} className="px-5 py-3 font-medium">
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.length === 0 ? (
-            <tr>
-              <td
-                colSpan={head.length}
-                className="px-5 py-6 text-center text-slate-400"
-              >
-                No data yet.
-              </td>
-            </tr>
-          ) : (
-            rows.map((row, i) => (
-              <tr
-                key={i}
-                className="border-t border-slate-100 dark:border-slate-700"
-              >
-                {row.map((cell, j) => (
-                  <td
-                    key={j}
-                    className={`px-5 py-3 ${j === 0 ? "font-medium text-slate-800 dark:text-slate-100" : "tabular-nums text-slate-600 dark:text-slate-300"}`}
-                  >
-                    {cell}
-                  </td>
-                ))}
-              </tr>
-            ))
-          )}
-        </tbody>
-      </table>
     </div>
   );
 }

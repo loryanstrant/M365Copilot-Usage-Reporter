@@ -54,6 +54,29 @@ export default function FilterBar({
             ))}
           </div>
         </Field>
+        <Field label="Measure">
+          <div className="flex h-[38px] items-center gap-1 rounded-lg border border-slate-200 p-1 dark:border-slate-600">
+            {(
+              [
+                { value: "prompts", label: "Prompts" },
+                { value: "conversations", label: "Conversations" },
+              ] as const
+            ).map((m) => (
+              <button
+                key={m.value}
+                onClick={() => f.setMetric(m.value)}
+                aria-pressed={f.metric === m.value}
+                className={`h-[30px] rounded-md px-3 text-xs font-medium transition-colors ${
+                  f.metric === m.value
+                    ? "bg-brand-600 text-white shadow-sm"
+                    : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-700"
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+        </Field>
         {showUserSearch && (
           <Field label="Search user">
             <input
