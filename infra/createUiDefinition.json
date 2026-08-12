@@ -33,6 +33,23 @@
             }
           ]
         }
+      },
+      {
+        "name": "pgCapabilities",
+        "type": "Microsoft.Solutions.ArmApiControl",
+        "request": {
+          "method": "GET",
+          "path": "[concat(subscription().id, '/providers/Microsoft.DBforPostgreSQL/locations/', location(), '/capabilities?api-version=2024-08-01')]"
+        }
+      },
+      {
+        "name": "pgRegionError",
+        "type": "Microsoft.Common.InfoBox",
+        "visible": "[equals(length(basics('pgCapabilities').value), 0)]",
+        "options": {
+          "icon": "Error",
+          "text": "[concat('Your subscription cannot provision an Azure Database for PostgreSQL flexible server in \"', location(), '\" (the deployment would fail with \"The value of the Version should be in: []\"). Most likely the Microsoft.DBforPostgreSQL resource provider is not registered on this subscription — register it under Subscription > Resource providers, then retry. Otherwise pick a different region such as australiaeast, eastus, or westeurope.')]"
+        }
       }
     ],
     "steps": [
@@ -85,7 +102,7 @@
             "visible": true,
             "options": {
               "icon": "Info",
-              "text": "Defaults are fine for most deployments. If deployment fails with \"The value of the 'Version' should be in: []\", your region does not offer the chosen database version/size — change them below or pick another region."
+              "text": "Defaults are fine for most deployments. If deployment fails with \"The value of the 'Version' should be in: []\", your subscription is not permitted to create a PostgreSQL flexible server in the selected region — change the region on the Basics tab (the form warns you there). The version/size options below rarely need changing."
             }
           },
           {
