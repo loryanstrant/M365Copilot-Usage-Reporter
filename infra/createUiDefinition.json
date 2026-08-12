@@ -23,13 +23,13 @@
         "type": "Microsoft.Common.TextBox",
         "label": "Resource name prefix",
         "defaultValue": "copilot",
-        "toolTip": "Short prefix (letters and numbers) used to name every resource.",
+        "toolTip": "Short prefix (lowercase, starts with a letter) used to name every resource.",
         "constraints": {
           "required": true,
           "validations": [
             {
-              "regex": "^[a-z0-9]{2,12}$",
-              "message": "2-12 lowercase letters or numbers."
+              "regex": "^[a-z][a-z0-9]{1,11}$",
+              "message": "2-12 lowercase letters or numbers, starting with a letter."
             }
           ]
         }
@@ -85,7 +85,7 @@
             "visible": true,
             "options": {
               "icon": "Info",
-              "text": "Defaults are fine for most deployments. The image tag controls which published build is deployed."
+              "text": "Defaults are fine for most deployments. If deployment fails with \"The value of the 'Version' should be in: []\", your region does not offer the chosen database version/size — change them below or pick another region."
             }
           },
           {
@@ -103,6 +103,53 @@
                 }
               ]
             }
+          },
+          {
+            "name": "postgresVersion",
+            "type": "Microsoft.Common.DropDown",
+            "label": "PostgreSQL version",
+            "defaultValue": "16",
+            "toolTip": "PostgreSQL major version to provision.",
+            "constraints": {
+              "allowedValues": [
+                { "label": "17", "value": "17" },
+                { "label": "16", "value": "16" },
+                { "label": "15", "value": "15" },
+                { "label": "14", "value": "14" }
+              ],
+              "required": true
+            }
+          },
+          {
+            "name": "postgresSkuTier",
+            "type": "Microsoft.Common.DropDown",
+            "label": "Database compute tier",
+            "defaultValue": "Burstable",
+            "toolTip": "Burstable is cheapest. Switch to General Purpose if your region lacks Burstable capacity.",
+            "constraints": {
+              "allowedValues": [
+                { "label": "Burstable (cheapest)", "value": "Burstable" },
+                { "label": "General Purpose", "value": "GeneralPurpose" },
+                { "label": "Memory Optimized", "value": "MemoryOptimized" }
+              ],
+              "required": true
+            }
+          },
+          {
+            "name": "postgresSkuName",
+            "type": "Microsoft.Common.TextBox",
+            "label": "Database compute size",
+            "defaultValue": "Standard_B1ms",
+            "toolTip": "Must match the tier above. Examples: Standard_B1ms (Burstable), Standard_D2ds_v5 (General Purpose), Standard_E2ds_v5 (Memory Optimized).",
+            "constraints": {
+              "required": true,
+              "validations": [
+                {
+                  "regex": "^Standard_[A-Za-z0-9_]+$",
+                  "message": "A valid flexible-server SKU name, e.g. Standard_B1ms."
+                }
+              ]
+            }
           }
         ]
       }
@@ -112,7 +159,10 @@
       "namePrefix": "[basics('namePrefix')]",
       "adminUsername": "[steps('app').adminUsername]",
       "adminPassword": "[steps('app').adminPassword]",
-      "imageTag": "[steps('advanced').imageTag]"
+      "imageTag": "[steps('advanced').imageTag]",
+      "postgresVersion": "[steps('advanced').postgresVersion]",
+      "postgresSkuName": "[steps('advanced').postgresSkuName]",
+      "postgresSkuTier": "[steps('advanced').postgresSkuTier]"
     }
   }
 }

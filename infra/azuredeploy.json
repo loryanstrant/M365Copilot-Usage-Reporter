@@ -11,7 +11,7 @@
       "minLength": 2,
       "maxLength": 12,
       "metadata": {
-        "description": "Short prefix used to name every resource (letters/numbers only)."
+        "description": "Short prefix for resource names. Use lowercase letters/numbers and start with a letter (e.g. 'copilot'). Kept short so Container App names stay within Azure's 32-character limit."
       }
     },
     "location": {
@@ -97,17 +97,41 @@
       "metadata": {
         "description": "Only used when Entra SSO is enabled. Directory (tenant) ID that issues sign-in tokens. Defaults to the deployment tenant."
       }
+    },
+    "postgresVersion": {
+      "type": "string",
+      "defaultValue": "16",
+      "allowedValues": [ "17", "16", "15", "14" ],
+      "metadata": {
+        "description": "PostgreSQL major version. If deployment fails with \"The value of the 'Version' should be in: []\", the target region does not offer this version/SKU combination — deploy to a fully supported region (e.g. australiaeast, eastus, westeurope) or change postgresSkuName/postgresSkuTier."
+      }
+    },
+    "postgresSkuName": {
+      "type": "string",
+      "defaultValue": "Standard_B1ms",
+      "metadata": {
+        "description": "PostgreSQL Flexible Server compute size. Default is the cheapest burstable size. If your region lacks Burstable capacity, switch to a General Purpose size such as 'Standard_D2ds_v5' and set postgresSkuTier to 'GeneralPurpose'."
+      }
+    },
+    "postgresSkuTier": {
+      "type": "string",
+      "defaultValue": "Burstable",
+      "allowedValues": [ "Burstable", "GeneralPurpose", "MemoryOptimized" ],
+      "metadata": {
+        "description": "Compute tier that matches postgresSkuName (Burstable for B-series, GeneralPurpose for D-series, MemoryOptimized for E-series)."
+      }
     }
   },
   "variables": {
-    "resourceToken": "[toLower(uniqueString(resourceGroup().id, parameters('namePrefix')))]",
-    "logsName": "[format('{0}-log-{1}', parameters('namePrefix'), variables('resourceToken'))]",
-    "envName": "[format('{0}-cae-{1}', parameters('namePrefix'), variables('resourceToken'))]",
-    "pgServerName": "[format('{0}-psql-{1}', parameters('namePrefix'), variables('resourceToken'))]",
+    "prefix": "[toLower(parameters('namePrefix'))]",
+    "resourceToken": "[take(toLower(uniqueString(resourceGroup().id, parameters('namePrefix'))), 8)]",
+    "logsName": "[format('{0}-log-{1}', variables('prefix'), variables('resourceToken'))]",
+    "envName": "[format('{0}-cae-{1}', variables('prefix'), variables('resourceToken'))]",
+    "pgServerName": "[format('{0}-psql-{1}', variables('prefix'), variables('resourceToken'))]",
     "pgAdminLogin": "copilotadmin",
     "pgDatabaseName": "copilot",
-    "apiAppName": "[format('{0}-api-{1}', parameters('namePrefix'), variables('resourceToken'))]",
-    "workerAppName": "[format('{0}-worker-{1}', parameters('namePrefix'), variables('resourceToken'))]",
+    "apiAppName": "[format('{0}-api-{1}', variables('prefix'), variables('resourceToken'))]",
+    "workerAppName": "[format('{0}-worker-{1}', variables('prefix'), variables('resourceToken'))]",
     "apiImage": "[format('{0}/api:{1}', parameters('imageRegistry'), parameters('imageTag'))]",
     "workerImage": "[format('{0}/worker:{1}', parameters('imageRegistry'), parameters('imageTag'))]",
     "databaseUrl": "[format('postgresql+psycopg://{0}:{1}@{2}.postgres.database.azure.com:5432/{3}?sslmode=require', variables('pgAdminLogin'), parameters('postgresAdminPassword'), variables('pgServerName'), variables('pgDatabaseName'))]",
@@ -144,11 +168,11 @@
       "name": "[variables('pgServerName')]",
       "location": "[parameters('location')]",
       "sku": {
-        "name": "Standard_B1ms",
-        "tier": "Burstable"
+        "name": "[parameters('postgresSkuName')]",
+        "tier": "[parameters('postgresSkuTier')]"
       },
       "properties": {
-        "version": "16",
+        "version": "[parameters('postgresVersion')]",
         "administratorLogin": "[variables('pgAdminLogin')]",
         "administratorLoginPassword": "[parameters('postgresAdminPassword')]",
         "storage": { "storageSizeGB": 32 },

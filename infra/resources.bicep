@@ -31,6 +31,15 @@ param entraClientSecret string = ''
 @description('Directory (tenant) ID that issues sign-in tokens. Defaults to the deployment tenant.')
 param entraTenantId string = tenant().tenantId
 
+@allowed([ '17', '16', '15', '14' ])
+@description('PostgreSQL major version. If a region reports the allowed set as empty ([]), it does not offer this version/SKU — choose a supported region or a different SKU.')
+param postgresVersion string = '16'
+@description('PostgreSQL Flexible Server compute size. Default is the cheapest burstable size; switch to e.g. Standard_D2ds_v5 (GeneralPurpose) if a region lacks Burstable.')
+param postgresSkuName string = 'Standard_B1ms'
+@allowed([ 'Burstable', 'GeneralPurpose', 'MemoryOptimized' ])
+@description('Compute tier matching postgresSkuName.')
+param postgresSkuTier string = 'Burstable'
+
 // Workload prefix so every resource is instantly identifiable in the portal
 // (e.g. "copilot-psql-xxxx" instead of a bare "psql-xxxx"). Change this one
 // value to rebrand every resource name.
@@ -95,11 +104,11 @@ resource postgres 'Microsoft.DBforPostgreSQL/flexibleServers@2024-08-01' = {
   location: location
   tags: tags
   sku: {
-    name: 'Standard_B1ms'
-    tier: 'Burstable'
+    name: postgresSkuName
+    tier: postgresSkuTier
   }
   properties: {
-    version: '16'
+    version: postgresVersion
     administratorLogin: pgAdminLogin
     administratorLoginPassword: postgresAdminPassword
     storage: { storageSizeGB: 32 }

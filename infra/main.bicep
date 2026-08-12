@@ -29,6 +29,15 @@ param adminUsername string = 'admin'
 @description('First-run admin password for the report.')
 param adminPassword string
 
+@allowed([ '17', '16', '15', '14' ])
+@description('PostgreSQL major version. If a region reports the allowed set as empty ([]), pick a supported region or a different SKU/tier.')
+param postgresVersion string = '16'
+@description('PostgreSQL Flexible Server compute size (e.g. Standard_B1ms, Standard_D2ds_v5).')
+param postgresSkuName string = 'Standard_B1ms'
+@allowed([ 'Burstable', 'GeneralPurpose', 'MemoryOptimized' ])
+@description('Compute tier matching postgresSkuName.')
+param postgresSkuTier string = 'Burstable'
+
 var resourceToken = toLower(uniqueString(subscription().id, environmentName, location))
 var tags = { 'azd-env-name': environmentName }
 
@@ -50,6 +59,9 @@ module resources 'resources.bicep' = {
     secretKey: secretKey
     adminUsername: adminUsername
     adminPassword: adminPassword
+    postgresVersion: postgresVersion
+    postgresSkuName: postgresSkuName
+    postgresSkuTier: postgresSkuTier
   }
 }
 

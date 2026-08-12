@@ -22,6 +22,15 @@
     },
     "adminPassword": {
       "value": "${ADMIN_PASSWORD}"
+    },
+    "postgresVersion": {
+      "value": "${POSTGRES_VERSION=16}"
+    },
+    "postgresSkuName": {
+      "value": "${POSTGRES_SKU_NAME=Standard_B1ms}"
+    },
+    "postgresSkuTier": {
+      "value": "${POSTGRES_SKU_TIER=Burstable}"
     }
   }
 }
