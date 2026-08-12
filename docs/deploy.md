@@ -134,7 +134,11 @@ sign in with their **work account** via Azure Container Apps **Easy Auth** — n
 services, and it's free. Administration stays behind the password; SSO users get a read-only
 **viewer** role.
 
-**Enable it at deploy time** by setting these template parameters (all default off/empty):
+**Enable it at deploy time (portal button):** on the **Deploy to Azure** form there is an
+**Authentication** tab. Set **Enable Entra ID single sign-on = Yes** and fill in the app
+registration **client ID**, **client secret**, and (optional) **tenant ID**. These map to the
+template parameters below (which you can also set directly when deploying the template by hand or via
+`azd`, all default off/empty):
 
 | Parameter | Value |
 | --- | --- |
@@ -157,9 +161,11 @@ Once enabled, the sign-in page shows a **"Sign in with Microsoft"** button, and 
 signed in silently. If the configured **report access group** is set, only its members are admitted;
 everyone else is refused (fail-closed).
 
-To enable it on an already-deployed instance, redeploy the template with the parameters above, or add
-the authentication config to the api container app in the portal (**Authentication → Add identity
-provider → Microsoft**, unauthenticated access **allowed**).
+To enable it on an **already-deployed** instance without redeploying, add the authentication config
+to the api container app in the portal: open the **`…-api-…`** Container App → **Settings →
+Authentication → Add identity provider → Microsoft**, use the app registration's client ID + secret,
+and set unauthenticated access to **Allow**. (Redeploying the template with the parameters above
+works too.)
 
 ---
 

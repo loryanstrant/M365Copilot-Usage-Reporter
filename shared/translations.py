@@ -34,9 +34,14 @@ DEFAULT_APP_NAMES: dict[str, str] = {
 }
 
 # App classes that must never appear in the dataset (system-generated or not a
-# genuine record of human usage). ``predictivechat`` is a system-generated chat
-# type, not a real surface; ``m365admincenter`` was never real usage.
-DEFAULT_EXCLUDED_APPS: set[str] = {"m365admincenter", "predictivechat"}
+# genuine record of human usage). ``predictivechat`` and ``proactivechat`` are
+# system-generated chat types, not real surfaces; ``m365admincenter`` was never
+# real usage. Keep in sync with translations/app-names.json ("excluded_apps").
+DEFAULT_EXCLUDED_APPS: set[str] = {
+    "m365admincenter",
+    "predictivechat",
+    "proactivechat",
+}
 
 
 @dataclass(frozen=True)

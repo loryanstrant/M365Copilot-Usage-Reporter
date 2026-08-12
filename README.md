@@ -42,20 +42,30 @@ users** / Directory users; the **Backfill** page has a run history table with pe
 
 ### Enabling Entra ID single sign-on (optional)
 
-By default the dashboard is protected by the single admin password. To let colleagues sign in with
-their **work account** (read-only viewer role), turn on **Container Apps Easy Auth**:
+By default the dashboard is protected by the single admin password. You can additionally let
+colleagues sign in with their **work account** (read-only viewer role) via **Container Apps Easy
+Auth** — administration stays behind the password. You can turn this on **at deploy time or later**.
 
-- **Easiest — enable at deploy time:** on the **Deploy to Azure** form's *Advanced* options set
-  `enableEntraAuth = true` and provide an app registration **client ID + secret** (you can reuse the
-  reporter's own app registration) and, optionally, a **report access group** on the Settings page to
-  restrict who may view.
-- **On an already-running deployment:** open the **`…-api-…`** Container App → **Settings →
-  Authentication** → **Add identity provider** → **Microsoft**, use your app registration's client ID
-  + secret, and set *unauthenticated requests* to **Allow** (the app still gates admin behind the
-  password; SSO users become viewers). Then add the redirect URI
-  `https://<your-dashboardUrl>/.auth/login/aad/callback` to the app registration's **Authentication →
-  Web** redirect URIs, and add a **groups** claim under **Token configuration** if you use the report
-  access group.
+**One-time prerequisite (either path):** an Entra **app registration** for sign-in (you can reuse
+the reporter's own). Note its **Application (client) ID**, create a **client secret**, and after
+deployment add the redirect URI
+`https://<your-dashboardUrl>/.auth/login/aad/callback` under **Authentication → Web**. If you plan to
+restrict viewers to a security group, also add a **groups** claim under **Token configuration**.
+
+**Option A — at deploy time (recommended):** on the **Deploy to Azure** form, open the
+**Authentication** tab and set **Enable Entra ID single sign-on = Yes**, then paste the app
+registration **client ID**, **client secret**, and (optional) **tenant ID**. Everything is wired up
+automatically; grab the **`entraRedirectUriToRegister`** deployment output and add it to the app
+registration as above.
+
+**Option B — after deployment:** open the **`…-api-…`** Container App → **Settings →
+Authentication** → **Add identity provider** → **Microsoft**, use your app registration's client ID
++ secret, and set *unauthenticated requests* to **Allow** (the app still gates admin behind the
+password; SSO users become viewers). Add the redirect URI as above.
+
+Either way, once enabled the sign-in page shows a **"Sign in with Microsoft"** button and returning
+users are signed in silently. To restrict who may view, set a **report access group** on the
+**Settings** page — only members of that Entra group are admitted.
 
 Full details and screenshots: [`docs/deploy.md`](docs/deploy.md#entra-single-sign-on-optional).
 
