@@ -32,7 +32,13 @@ from worker.backfill import (
     request_cancel,
     run_backfill,
 )
-from worker.ingest import run_ingest, test_graph_connection
+from worker.ingest import (
+    get_user_sync_progress,
+    run_ingest,
+    sync_users,
+    test_graph_connection,
+    user_sync_running,
+)
 
 logger = logging.getLogger("api.admin")
 
@@ -40,6 +46,7 @@ router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(requir
 
 _DEFAULT_SKUS = ["639dec6b-bb19-468b-871c-c5c441c4b0cb"]
 _ingest_lock = asyncio.Lock()
+_user_sync_lock = asyncio.Lock()
 
 
 def _to_out(cfg: AppConfig | None) -> AppConfigOut:
@@ -133,6 +140,45 @@ async def ingest_run(background: BackgroundTasks) -> IngestRunOut:
         )
     background.add_task(_run_manual_ingest)
     return IngestRunOut(status="started", detail="Ingest started in the background.")
+
+
+async def _run_user_sync() -> None:
+    async with _user_sync_lock:
+        try:
+            await sync_users(SessionLocal)
+        except Exception:  # pragma: no cover - logged for observability
+            logger.exception("User sync failed")
+
+
+@router.post("/users/refresh", response_model=IngestRunOut)
+async def users_refresh(background: BackgroundTasks) -> IngestRunOut:
+    """Extract only the licensed + directory user lists (no prompt pull).
+
+    This is the prerequisite step for a refresh/backfill; running it first lets a
+    brand-new instance populate its user list (and watch it) before pulling data.
+    """
+    if _user_sync_lock.locked() or user_sync_running():
+        return IngestRunOut(
+            status="already_running", detail="A user extraction is already in progress."
+        )
+    background.add_task(_run_user_sync)
+    return IngestRunOut(status="started", detail="Extracting users in the background.")
+
+
+@router.get("/users/status")
+async def users_status(session: AsyncSession = Depends(get_session)) -> dict:
+    """Current user counts plus live extraction progress (for the first-run UI)."""
+    progress = get_user_sync_progress()
+    licensed = await session.scalar(select(func.count()).select_from(LicensedUser)) or 0
+    entra = await session.scalar(select(func.count()).select_from(EntraUser)) or 0
+    return {
+        "status": progress["status"],
+        "running": user_sync_running(),
+        "licensed_users": licensed,
+        "directory_users": entra,
+        "detail": progress["detail"],
+        "updated_at": progress["updated_at"],
+    }
 
 
 async def _run_backfill(lookback_days: int | None) -> None:

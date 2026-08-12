@@ -6,6 +6,7 @@ import type {
   BackfillProgress,
   BackfillRun,
   IngestRunResult,
+  UserSyncStatus,
 } from "../api/types";
 import DataTable, { type Column } from "../components/DataTable";
 
@@ -53,20 +54,23 @@ export default function BackfillPage() {
   const [coverage, setCoverage] = useState<BackfillCoverage | null>(null);
   const [progress, setProgress] = useState<BackfillProgress | null>(null);
   const [history, setHistory] = useState<BackfillRun[]>([]);
+  const [users, setUsers] = useState<UserSyncStatus | null>(null);
   const [lookback, setLookback] = useState(365);
   const [confirming, setConfirming] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
 
   async function refresh() {
     try {
-      const [c, p, h] = await Promise.all([
+      const [c, p, h, u] = await Promise.all([
         api<BackfillCoverage>("/admin/backfill/coverage"),
         api<BackfillProgress>("/admin/backfill/progress"),
         api<BackfillRun[]>("/admin/backfill/history"),
+        api<UserSyncStatus>("/admin/users/status"),
       ]);
       setCoverage(c);
       setProgress(p);
       setHistory(h);
+      setUsers(u);
     } catch {
       /* ignore */
     }
@@ -78,10 +82,23 @@ export default function BackfillPage() {
     return () => clearInterval(t);
   }, []);
 
-  const running = progress?.status === "running";
+  const running = progress?.status === "running" || progress?.status === "preparing";
+  const usersRunning = users?.running ?? false;
+  const noUsers = (users?.licensed_users ?? 0) === 0;
   // Discourage re-running when we already cover at least as far back as asked.
   const alreadyCovered =
     (coverage?.lookback_days ?? 0) >= lookback && (coverage?.total_prompts ?? 0) > 0;
+
+  async function extractUsers() {
+    setBanner(null);
+    try {
+      const res = await api<IngestRunResult>("/admin/users/refresh", { method: "POST" });
+      setBanner(res.detail);
+      await refresh();
+    } catch (err) {
+      setBanner(err instanceof ApiError ? err.message : "User extraction failed to start");
+    }
+  }
 
   async function start() {
     setBanner(null);
@@ -165,6 +182,58 @@ export default function BackfillPage() {
         </div>
       </div>
 
+      {/* Users — prerequisite for any data pull */}
+      <div className="card space-y-4 p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
+              Users
+            </h3>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              A backfill pulls history for your <strong>Copilot-licensed users</strong>, so
+              this list must be populated first. It refreshes automatically, or extract it
+              now.
+            </p>
+          </div>
+          <button
+            onClick={extractUsers}
+            disabled={usersRunning || running}
+            className="btn-secondary whitespace-nowrap"
+          >
+            {usersRunning ? "Extracting…" : "Refresh users"}
+          </button>
+        </div>
+
+        <div className="flex flex-wrap gap-6 text-sm">
+          <div>
+            <span className="text-slate-500 dark:text-slate-400">Licensed users: </span>
+            <span className="font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+              {users?.licensed_users ?? "—"}
+            </span>
+          </div>
+          <div>
+            <span className="text-slate-500 dark:text-slate-400">Directory users: </span>
+            <span className="font-semibold tabular-nums text-slate-800 dark:text-slate-100">
+              {users?.directory_users ?? "—"}
+            </span>
+          </div>
+        </div>
+
+        {usersRunning && (
+          <div className="rounded-lg bg-brand-50 px-4 py-3 text-sm text-brand-700 dark:bg-brand-900/20 dark:text-brand-300">
+            {users?.detail ?? "Extracting users from Microsoft Graph…"}
+          </div>
+        )}
+
+        {noUsers && !usersRunning && (
+          <div className="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:bg-amber-900/20 dark:text-amber-400">
+            No licensed users have been extracted yet. Click <strong>Refresh users</strong>{" "}
+            first — otherwise a backfill has no one to pull history for. (A backfill will do
+            this automatically, but running it here lets you confirm the count first.)
+          </div>
+        )}
+      </div>
+
       {/* Run controls */}
       <div className="card space-y-4 p-6">
         <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
@@ -191,21 +260,33 @@ export default function BackfillPage() {
               ))}
             </select>
           </div>
-          <button
-            onClick={onRunClick}
-            disabled={running}
-            className={
-              confirming
-                ? "btn-primary bg-amber-600 hover:bg-amber-700"
-                : "btn-primary"
-            }
-          >
-            {running
-              ? "Running…"
-              : confirming
-                ? "Yes, run it anyway"
-                : "Run backfill"}
-          </button>
+          {noUsers && !running ? (
+            <button
+              onClick={extractUsers}
+              disabled={usersRunning}
+              className="btn-primary"
+            >
+              {usersRunning ? "Extracting users…" : "Extract users first"}
+            </button>
+          ) : (
+            <button
+              onClick={onRunClick}
+              disabled={running || usersRunning}
+              className={
+                confirming
+                  ? "btn-primary bg-amber-600 hover:bg-amber-700"
+                  : "btn-primary"
+              }
+            >
+              {running
+                ? progress?.status === "preparing"
+                  ? "Preparing…"
+                  : "Running…"
+                : confirming
+                  ? "Yes, run it anyway"
+                  : "Run backfill"}
+            </button>
+          )}
           {running && (
             <button onClick={cancel} className="btn-secondary">
               Cancel

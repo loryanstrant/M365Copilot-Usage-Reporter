@@ -279,3 +279,12 @@ export interface BackfillCoverage {
   last_run_at: string | null;
 }
 
+export interface UserSyncStatus {
+  status: string; // idle | running | completed | failed
+  running: boolean;
+  licensed_users: number;
+  directory_users: number;
+  detail: string | null;
+  updated_at: string | null;
+}
+

@@ -128,6 +128,41 @@ async def test_backfill_skips_already_covered_span(session, licensed):
     assert stats["prompts"] == 0  # nothing fetched; span already covered
 
 
+class FakeGraphWithUsers(FakeGraph):
+    """FakeGraph that can also enumerate licensed users (for the guard test)."""
+
+    def __init__(self, interactions_by_user, licensed_user_ids):
+        super().__init__(interactions_by_user)
+        self._licensed = licensed_user_ids
+
+    async def iter_licensed_users(self, sku_ids):
+        for uid in self._licensed:
+            yield {"id": uid}
+
+
+@pytest.mark.asyncio
+async def test_backfill_extracts_users_when_none_stored(session):
+    # No LicensedUser rows exist. The backfill must extract them from Graph first
+    # (the first-run safety net) and then pull their prompts — not silently no-op.
+    graph = FakeGraphWithUsers(
+        {"user-1": [_interaction("p1", "2026-07-10T10:00:00Z")]},
+        licensed_user_ids=["user-1"],
+    )
+    stats = await run_backfill(
+        SessionLocal, graph=graph, config=_config(), lookback_days=30, now=NOW
+    )
+    assert stats["users"] == 1
+    assert stats["prompts"] == 1
+
+    async with SessionLocal() as s:
+        licensed_count = (
+            await s.execute(select(func.count()).select_from(LicensedUser))
+        ).scalar_one()
+        assert licensed_count == 1  # users were extracted and persisted
+        total = (await s.execute(select(func.count()).select_from(Prompt))).scalar_one()
+        assert total == 1
+
+
 @pytest.mark.asyncio
 async def test_backfill_extends_further_back(session, licensed):
     # Regression: a previous short backfill covered [2026-07-01, now]. Asking for

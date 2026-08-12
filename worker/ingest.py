@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable
+from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Protocol
 
@@ -305,6 +306,105 @@ async def count_prompts(session: AsyncSession) -> int:
     return int(
         (await session.execute(select(func.count()).select_from(Prompt))).scalar_one()
     )
+
+
+# --- user-only sync (fast; no prompts) ---------------------------------
+# Extracting the licensed/directory user lists is a prerequisite for both the
+# recurring ingest and the historical backfill (which iterate licensed users).
+# This runs that step on its own so the UI can do it first — and observe it —
+# before any prompt pull.
+@dataclass
+class UserSyncProgress:
+    status: str = "idle"  # idle | running | completed | failed
+    licensed_users: int = 0
+    directory_users: int = 0
+    updated_at: str | None = None
+    detail: str | None = None
+
+
+_user_sync = UserSyncProgress()
+
+
+def get_user_sync_progress() -> dict[str, Any]:
+    return asdict(_user_sync)
+
+
+def user_sync_running() -> bool:
+    return _user_sync.status == "running"
+
+
+async def sync_users(
+    session_factory: SessionFactory,
+    *,
+    graph: GraphLike | None = None,
+    config: AppConfig | None = None,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Refresh only the licensed + directory user snapshots (no prompt pull).
+
+    Recorded as a ``users`` job for observability and exposed via live progress
+    so the first-run UI can extract users before a refresh/backfill.
+    """
+    now = now or datetime.now(timezone.utc)
+    owns_graph = False
+    _user_sync.status = "running"
+    _user_sync.detail = "Reading licensed users…"
+    _user_sync.updated_at = now.isoformat()
+
+    async with session_factory() as session:
+        if config is None:
+            config = await load_app_config(session)
+            if config is None or not config.tenant_id:
+                _user_sync.status = "failed"
+                _user_sync.detail = "Graph is not configured yet."
+                _user_sync.updated_at = datetime.now(timezone.utc).isoformat()
+                raise IngestError("Graph is not configured yet.")
+        if graph is None:
+            graph = build_graph_client(config)
+            owns_graph = True
+
+        job = JobRun(job_name="users", status="running")
+        session.add(job)
+        await session.flush()
+        stats: dict[str, Any] = {}
+        try:
+            stats["licensed_users"] = await sync_licensed_users(session, graph, config)
+            _user_sync.licensed_users = stats["licensed_users"]
+            _user_sync.detail = "Recording licence totals…"
+            _user_sync.updated_at = datetime.now(timezone.utc).isoformat()
+
+            stats["license_counts"] = await sync_license_counts(
+                session, graph, config, now
+            )
+            _user_sync.detail = "Reading directory users…"
+            _user_sync.updated_at = datetime.now(timezone.utc).isoformat()
+
+            stats["entra_users"] = await sync_entra_users(session, graph, config)
+            _user_sync.directory_users = stats["entra_users"]
+
+            job.status = "success"
+            job.finished_at = datetime.now(timezone.utc)
+            job.stats = stats
+            await session.commit()
+            _user_sync.status = "completed"
+            _user_sync.detail = None
+            _user_sync.updated_at = job.finished_at.isoformat()
+            logger.info("User sync complete: %s", stats)
+            return stats
+        except Exception as exc:  # noqa: BLE001 - persisted for observability
+            stats["error"] = str(exc)
+            job.status = "failed"
+            job.finished_at = datetime.now(timezone.utc)
+            job.stats = stats
+            await session.commit()
+            _user_sync.status = "failed"
+            _user_sync.detail = str(exc)
+            _user_sync.updated_at = job.finished_at.isoformat()
+            logger.exception("User sync failed")
+            raise
+        finally:
+            if owns_graph and graph is not None:
+                await graph.aclose()
 
 
 async def test_graph_connection(config: AppConfig) -> dict[str, Any]:
