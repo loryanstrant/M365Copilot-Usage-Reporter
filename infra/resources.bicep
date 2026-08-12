@@ -108,6 +108,7 @@ resource postgres 'Microsoft.DBforPostgreSQL/flexibleServers@2024-08-01' = {
     tier: postgresSkuTier
   }
   properties: {
+    createMode: 'Default'
     version: postgresVersion
     administratorLogin: pgAdminLogin
     administratorLoginPassword: postgresAdminPassword

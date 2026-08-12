@@ -48,7 +48,7 @@
         "visible": "[equals(length(basics('pgCapabilities').value), 0)]",
         "options": {
           "icon": "Error",
-          "text": "[concat('Your subscription cannot provision an Azure Database for PostgreSQL flexible server in \"', location(), '\" (the deployment would fail with \"The value of the Version should be in: []\"). Most likely the Microsoft.DBforPostgreSQL resource provider is not registered on this subscription — register it under Subscription > Resource providers, then retry. Otherwise pick a different region such as australiaeast, eastus, or westeurope.')]"
+          "text": "[concat('This subscription cannot provision an Azure Database for PostgreSQL flexible server in \"', location(), '\", so the deployment would fail with \"The value of the Version should be in: []\". Pick a different region above (e.g. australiaeast, eastus, or westeurope). If every region you try shows this, register the Microsoft.DBforPostgreSQL resource provider on the subscription and retry.')]"
         }
       }
     ],
@@ -126,10 +126,9 @@
             "type": "Microsoft.Common.DropDown",
             "label": "PostgreSQL version",
             "defaultValue": "16",
-            "toolTip": "PostgreSQL major version to provision.",
+            "toolTip": "PostgreSQL major version to provision. 16 is the recommended default.",
             "constraints": {
               "allowedValues": [
-                { "label": "17", "value": "17" },
                 { "label": "16", "value": "16" },
                 { "label": "15", "value": "15" },
                 { "label": "14", "value": "14" }

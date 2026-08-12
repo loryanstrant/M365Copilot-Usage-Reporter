@@ -172,6 +172,7 @@
         "tier": "[parameters('postgresSkuTier')]"
       },
       "properties": {
+        "createMode": "Default",
         "version": "[parameters('postgresVersion')]",
         "administratorLogin": "[variables('pgAdminLogin')]",
         "administratorLoginPassword": "[parameters('postgresAdminPassword')]",
