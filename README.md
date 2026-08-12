@@ -20,6 +20,59 @@ database password and encryption keys are generated for you. When the deployment
 > (`m365copilot-usage-reporter/api` and `.../worker`) to **Public** once, so Container Apps can pull
 > them anonymously. See [`docs/deploy.md`](docs/deploy.md) for the full walkthrough.
 
+## After it's deployed
+
+**1. Open the dashboard.** In the portal, go to your resource group → open the deployment (or
+Deployments → the `Microsoft.Template` run) → **Outputs** → copy **`dashboardUrl`**. That is your app.
+It's served by the **`…-api-…`** Container App (the `…-worker-…` one has no web UI — it just runs
+ingestion in the background). You can also get the URL from the api Container App's **Overview →
+Application Url**.
+
+**2. Sign in.** Username is what you set as **admin username** (default `admin`); password is the
+**admin password** you chose at deploy time.
+
+**3. Connect Microsoft Graph.** Go to **Settings**. The first-run wizard walks you through creating
+an Entra **app registration** with the two application permissions
+(`AiEnterpriseInteraction.Read.All`, `Directory.Read.All`, admin-consented) and a client secret.
+Paste **Tenant ID**, **Client ID**, **Client secret**, then **Test connection**.
+
+**4. Load data.** Click **Refresh now** for the last 24 hours, or open **Backfill** to pull history
+(default 30 days). The **Data status** card on Settings shows Prompts / Conversations / **Licensed
+users** / Directory users; the **Backfill** page has a run history table with per-run stats.
+
+### Enabling Entra ID single sign-on (optional)
+
+By default the dashboard is protected by the single admin password. To let colleagues sign in with
+their **work account** (read-only viewer role), turn on **Container Apps Easy Auth**:
+
+- **Easiest — enable at deploy time:** on the **Deploy to Azure** form's *Advanced* options set
+  `enableEntraAuth = true` and provide an app registration **client ID + secret** (you can reuse the
+  reporter's own app registration) and, optionally, a **report access group** on the Settings page to
+  restrict who may view.
+- **On an already-running deployment:** open the **`…-api-…`** Container App → **Settings →
+  Authentication** → **Add identity provider** → **Microsoft**, use your app registration's client ID
+  + secret, and set *unauthenticated requests* to **Allow** (the app still gates admin behind the
+  password; SSO users become viewers). Then add the redirect URI
+  `https://<your-dashboardUrl>/.auth/login/aad/callback` to the app registration's **Authentication →
+  Web** redirect URIs, and add a **groups** claim under **Token configuration** if you use the report
+  access group.
+
+Full details and screenshots: [`docs/deploy.md`](docs/deploy.md#entra-single-sign-on-optional).
+
+### Where to find run history, logs, and errors
+
+- **In the app:** **Settings → Data status** (last run + counts) and **Backfill** (per-run history
+  table with prompts/lookback/status). A failed run shows its error message in the run's stats.
+- **Container logs (the real detail):** manual **Refresh now** and **Backfill** run inside the
+  **`…-api-…`** Container App, so their logs live there — open it → **Monitoring → Log stream**
+  (live), or **Logs** to query `ContainerAppConsoleLogs_CL`. The scheduled background ingest runs in
+  the **`…-worker-…`** Container App — check its log stream for scheduled-run errors.
+- **A run that "completes instantly with no data" almost always means zero Copilot-licensed users
+  were found** (nothing to query). Check **Settings → Data status → Licensed users**, or the
+  **Copilot-licensed users** number shown by **Test connection**. If it's 0, the configured Copilot
+  **SKU ID** doesn't match any assigned licences in the tenant — set the correct SKU under Settings →
+  *Copilot SKU IDs* (the default is Microsoft 365 Copilot, `639dec6b-bb19-468b-871c-c5c441c4b0cb`).
+
 ## Screenshots
 
 ### Overview
