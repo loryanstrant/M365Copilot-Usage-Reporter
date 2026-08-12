@@ -33,6 +33,7 @@ from worker.ingest import (
     SessionFactory,
     build_graph_client,
     load_app_config,
+    sync_licensed_users,
 )
 from worker.transforms import transform_interaction
 
@@ -67,7 +68,7 @@ def request_cancel() -> None:
 
 
 def is_running() -> bool:
-    return _progress.status == "running"
+    return _progress.status in ("running", "preparing")
 
 
 def adaptive_concurrency(user_count: int, cap: int) -> int:
@@ -125,6 +126,23 @@ async def run_backfill(
             uid
             for (uid,) in (await session.execute(select(LicensedUser.user_id))).all()
         ]
+        # Safety net: a backfill iterates licensed users, but only a full refresh
+        # populates that list. If it's empty (typical on a brand-new instance),
+        # extract the licensed users first so the backfill never silently pulls
+        # nothing. The UI also offers this as an explicit step.
+        if not user_ids:
+            _progress.status = "preparing"
+            _progress.detail = "No users yet — extracting licensed users…"
+            _progress.started_at = now.isoformat()
+            _progress.updated_at = datetime.now(timezone.utc).isoformat()
+            await sync_licensed_users(session, graph, config)
+            await session.commit()
+            user_ids = [
+                uid
+                for (uid,) in (
+                    await session.execute(select(LicensedUser.user_id))
+                ).all()
+            ]
         # Per-user coverage is tracked as two boundaries so a backfill can be
         # *extended further back* later: ``backfill:{id}`` = latest covered,
         # ``backfillstart:{id}`` = earliest covered. A window is skipped only

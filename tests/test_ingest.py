@@ -21,7 +21,7 @@ from shared.models import (
     LicensedUser,
     Prompt,
 )
-from worker.ingest import run_ingest
+from worker.ingest import run_ingest, sync_users
 
 NOW = datetime(2026, 7, 29, 12, 0, 0, tzinfo=timezone.utc)
 SKU = "639dec6b-bb19-468b-871c-c5c441c4b0cb"
@@ -180,3 +180,31 @@ async def test_watermark_advances():
         for st in states:
             assert st.watermark is not None
             assert st.last_status == "ok"
+
+
+@pytest.mark.asyncio
+async def test_sync_users_populates_users_without_prompts():
+    # The user-only sync refreshes licensed + directory users (and licence
+    # counts) but must NOT pull any prompts.
+    stats = await sync_users(SessionLocal, graph=_fake_graph(), config=_config(), now=NOW)
+
+    assert stats["licensed_users"] == 2
+    assert stats["license_counts"] == 1
+    assert stats["entra_users"] == 1
+    assert "prompts" not in stats
+
+    async with SessionLocal() as s:
+        assert (
+            await s.execute(select(func.count()).select_from(LicensedUser))
+        ).scalar_one() == 2
+        assert (
+            await s.execute(select(func.count()).select_from(EntraUser))
+        ).scalar_one() == 1
+        # No prompts pulled by a user-only sync.
+        assert (
+            await s.execute(select(func.count()).select_from(Prompt))
+        ).scalar_one() == 0
+        job = (
+            await s.execute(select(JobRun).where(JobRun.job_name == "users"))
+        ).scalars().one()
+        assert job.status == "success"
