@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.auth import (
     CurrentUser,
     authenticate_user,
+    can_view_org,
     create_access_token,
     get_current_user,
 )
@@ -137,12 +138,25 @@ async def oidc_callback(
     if group_id and not await is_group_member(principal, group_id, session):
         return _fail("You are not a member of the group allowed to view this report.")
 
-    token = create_access_token(principal.name, "viewer")
+    token = create_access_token(
+        principal.name,
+        "viewer",
+        oid=principal.object_id,
+        upn=principal.name,
+    )
     response = RedirectResponse(f"/#sso={token}", status_code=status.HTTP_302_FOUND)
     response.delete_cookie(STATE_COOKIE, path=_COOKIE_PATH)
     return response
 
 
 @router.get("/me", response_model=UserOut)
-async def me(user: CurrentUser = Depends(get_current_user)) -> UserOut:
-    return UserOut(username=user.username, role=user.role)
+async def me(
+    user: CurrentUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+) -> UserOut:
+    return UserOut(
+        username=user.username,
+        role=user.role,
+        can_view_org=await can_view_org(user, session),
+        has_personal_view=user.has_personal_view,
+    )

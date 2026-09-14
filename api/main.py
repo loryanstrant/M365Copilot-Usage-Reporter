@@ -104,6 +104,8 @@ def _register_routers() -> None:
     app.include_router(auth.router)
     app.include_router(admin.router)
     app.include_router(metrics.router)
+    app.include_router(metrics.common_router)
+    app.include_router(metrics.me_router)
 
 
 _register_routers()
