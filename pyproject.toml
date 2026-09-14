@@ -16,7 +16,7 @@ dependencies = [
     "pydantic-settings>=2.3",
     "psycopg[binary]>=3.2",
     "cryptography>=42",
-    "python-jose[cryptography]>=3.3",
+    "pyjwt>=2.9",
     "bcrypt>=4.1",
     "python-multipart>=0.0.9",
 ]

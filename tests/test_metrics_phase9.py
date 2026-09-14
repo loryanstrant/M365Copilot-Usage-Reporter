@@ -146,6 +146,68 @@ async def test_chat_types(seeded):
     assert chat == {"Work": 3, "Web": 1}
 
 
+@pytest.mark.asyncio
+async def test_coaching_pairs_by_department(seeded):
+    res = await metrics.coaching_pairs(seeded, group_by="department", today=TODAY)
+    groups = {g["name"]: g for g in res["groups"]}
+
+    # Dan has never used Copilot but must still appear: the prompt join is a
+    # LEFT JOIN, so zero-usage licensed users are exactly what we surface.
+    eng = groups["Eng"]
+    assert eng["licensed"] == 2 and eng["active"] == 1 and eng["inactive"] == 1
+    assert [p["laggard"]["display_name"] for p in eng["pairs"]] == ["Dan"]
+    assert [p["leader"]["display_name"] for p in eng["pairs"]] == ["Bob"]
+    assert eng["pairs"][0]["gap"] == 1
+
+    # Sales is evenly spread (3 vs 1, both active) so there is nothing to pair.
+    assert groups["Sales"]["pairs"] == []
+    assert res["totals"]["pairs"] == 1
+    assert res["group_label"] == "Department"
+
+
+@pytest.mark.asyncio
+async def test_coaching_pairs_by_manager_uses_manager_name(seeded):
+    res = await metrics.coaching_pairs(seeded, group_by="manager", today=TODAY)
+    groups = {g["name"]: g for g in res["groups"]}
+    assert "Manager Two" in groups  # resolved via the manager alias join
+    pairs = groups["Manager Two"]["pairs"]
+    assert [(p["leader"]["display_name"], p["laggard"]["display_name"]) for p in pairs] == [
+        ("Cara", "Dan")
+    ]
+
+
+@pytest.mark.asyncio
+async def test_coaching_pairs_filters_do_not_drop_zero_usage_users(seeded):
+    """A prompt-level filter must narrow the counts without hiding laggards."""
+    res = await metrics.coaching_pairs(
+        seeded,
+        filters=MetricFilters(apps=["Word"]),
+        group_by="department",
+        today=TODAY,
+    )
+    groups = {g["name"]: g for g in res["groups"]}
+    # Only Cara used Word, so within Sales she becomes the leader and Alice —
+    # who has prompts, but none in Word — becomes the laggard.
+    sales = groups["Sales"]
+    assert sales["licensed"] == 2
+    assert [(p["leader"]["display_name"], p["laggard"]["display_name"]) for p in sales["pairs"]] == [
+        ("Cara", "Alice")
+    ]
+    # Nobody in Eng used Word, so there is no leader to pair with.
+    assert groups["Eng"]["pairs"] == []
+
+
+@pytest.mark.asyncio
+async def test_coaching_pairs_metric_toggle(seeded):
+    res = await metrics.coaching_pairs(
+        seeded, group_by="department", metric="conversations", today=TODAY
+    )
+    assert res["metric"] == "conversations"
+    eng = {g["name"]: g for g in res["groups"]}["Eng"]
+    assert eng["pairs"][0]["leader"]["conversations"] == 1
+    assert eng["pairs"][0]["laggard"]["conversations"] == 0
+
+
 def test_copilot_score_ladder():
     assert metrics.copilot_score_from_count(10000) == 100
     assert metrics.copilot_score_from_count(2500) == 25

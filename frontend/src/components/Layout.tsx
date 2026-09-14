@@ -22,7 +22,7 @@ export default function Layout({ children }: { children: ReactNode }) {
       <SvgDefs />
       <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
         <div className="flex items-center gap-3 px-5 py-5">
-          <img src="/copilot-logo.png" alt="Copilot" className="h-8 w-8 shrink-0" />
+          <img src="/app-logo.png" alt="Copilot" className="h-8 w-8 shrink-0" />
           <div>
             <div className="text-sm font-semibold text-brand-600 dark:text-brand-500">
               M365 Copilot
@@ -51,6 +51,9 @@ export default function Layout({ children }: { children: ReactNode }) {
           <NavLink to="/laggards" className={navClass}>
             Laggards
           </NavLink>
+          <NavLink to="/coaching" className={navClass}>
+            Coaching pairs
+          </NavLink>
           <NavLink to="/licenses" className={navClass}>
             Licenses
           </NavLink>
@@ -59,6 +62,9 @@ export default function Layout({ children }: { children: ReactNode }) {
               Settings
             </NavLink>
           )}
+          <NavLink to="/help" className={navClass}>
+            Setup guide
+          </NavLink>
           <NavLink to="/about" className={navClass}>
             About
           </NavLink>
@@ -87,8 +93,8 @@ export default function Layout({ children }: { children: ReactNode }) {
           </div>
         </div>
       </aside>
-      <main className="flex-1 overflow-auto">
-        <div className="mx-auto max-w-6xl px-8 py-8">{children}</div>
+      <main className="min-w-0 flex-1 overflow-auto">
+        <div className="mx-auto w-full max-w-[1600px] px-8 py-8">{children}</div>
       </main>
     </div>
   );

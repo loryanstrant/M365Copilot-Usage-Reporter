@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from typing import Any
 
-from sqlalchemy import Select, distinct, func, select
+from sqlalchemy import Select, and_, distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.filters import MetricFilters
@@ -597,42 +597,35 @@ async def leaderboard_rollups(
 async def laggards(
     session: AsyncSession,
     *,
+    filters: MetricFilters | None = None,
     today: date | None = None,
     limit: int = 200,
 ) -> dict[str, Any]:
     """Licensed users with no/low recent usage, plus laggard rollups."""
+    f = filters or MetricFilters()
     today = today or date.today()
     window_start = today - timedelta(days=_ACTIVE_WINDOW_DAYS)
 
-    recent = dict(
-        (
-            await session.execute(
-                select(Prompt.user_id, func.count())
-                .where(Prompt.prompt_date >= window_start)
-                .group_by(Prompt.user_id)
-            )
-        ).all()
+    recent_q = (
+        select(Prompt.user_id, func.count())
+        .where(Prompt.prompt_date >= window_start, *f.prompt_conds())
+        .group_by(Prompt.user_id)
     )
-    last_use = dict(
-        (
-            await session.execute(
-                select(Prompt.user_id, func.max(Prompt.prompt_date)).group_by(
-                    Prompt.user_id
-                )
-            )
-        ).all()
+    recent = dict((await session.execute(recent_q)).all())
+    last_use_q = (
+        select(Prompt.user_id, func.max(Prompt.prompt_date))
+        .where(*f.prompt_conds())
+        .group_by(Prompt.user_id)
     )
-    licensed_ids = [
-        uid for (uid,) in (await session.execute(select(LicensedUser.user_id))).all()
-    ]
-    users_by_id = {
-        u.user_id: u
-        for u in (
-            await session.execute(
-                select(EntraUser).where(EntraUser.user_id.in_(licensed_ids))
-            )
-        ).scalars()
-    }
+    last_use = dict((await session.execute(last_use_q)).all())
+
+    users_q = (
+        select(EntraUser)
+        .join(LicensedUser, LicensedUser.user_id == EntraUser.user_id)
+        .where(*f.user_conds())
+    )
+    users_by_id = {u.user_id: u for u in (await session.execute(users_q)).scalars()}
+    licensed_ids = list(users_by_id.keys())
 
     rows: list[dict[str, Any]] = []
     dept_idle: dict[str, int] = {}
@@ -675,6 +668,168 @@ async def laggards(
         "users": rows[:limit],
         "top_departments": _top(dept_idle),
         "top_offices": _top(office_idle),
+    }
+
+
+# Peer groups a user can be ranked *within* on the coaching page.
+PEER_GROUPS: dict[str, str] = {
+    "department": "Department",
+    "office_location": "Office",
+    "manager": "Manager",
+}
+
+# A laggard is someone at or below this share of their own group's average.
+_LAGGARD_SHARE_OF_AVG = 0.5
+
+
+async def coaching_pairs(
+    session: AsyncSession,
+    *,
+    filters: MetricFilters | None = None,
+    group_by: str = "department",
+    metric: str = "prompts",
+    per_group: int = 3,
+    today: date | None = None,
+) -> dict[str, Any]:
+    """Leaders and laggards **within the same peer group**, plus suggested pairs.
+
+    Adoption rarely fails evenly across an organisation: most teams contain both
+    someone who has made Copilot part of their day and someone who has barely
+    started. Ranking people *within* their own department, office or manager's
+    team surfaces those two ends side by side, so a laggard can be partnered
+    with a leader who already does the same job in the same team.
+
+    Licensed users with **no** activity are the entire point of this view, so the
+    prompt-level filters are applied in the LEFT JOIN's ON clause rather than the
+    WHERE clause — putting them in WHERE would discard the very people we want.
+    """
+    f = filters or MetricFilters()
+    today = today or date.today()
+    metric = "conversations" if metric == "conversations" else "prompts"
+    if group_by not in PEER_GROUPS:
+        group_by = "department"
+
+    mgr = EntraUser.__table__.alias("mgr")
+    if group_by == "manager":
+        key_col: Any = EntraUser.manager_id
+        label_col: Any = mgr.c.display_name
+        extra_group_cols: list[Any] = [mgr.c.display_name]
+    elif group_by == "office_location":
+        key_col = label_col = EntraUser.office_location
+        extra_group_cols = []
+    else:
+        key_col = label_col = EntraUser.department
+        extra_group_cols = []
+
+    user_cols = [
+        EntraUser.user_id,
+        EntraUser.display_name,
+        EntraUser.job_title,
+        EntraUser.department,
+        EntraUser.office_location,
+    ]
+    q = (
+        select(
+            key_col.label("group_key"),
+            label_col.label("group_name"),
+            *user_cols,
+            func.count(Prompt.prompt_id).label("prompts"),
+            func.count(distinct(_conv_key())).label("conversations"),
+            func.max(Prompt.prompt_date).label("last_use"),
+        )
+        .select_from(EntraUser)
+        .join(LicensedUser, LicensedUser.user_id == EntraUser.user_id)
+        .join(
+            Prompt,
+            and_(Prompt.user_id == EntraUser.user_id, *f.prompt_conds()),
+            isouter=True,
+        )
+    )
+    if group_by == "manager":
+        q = q.join(mgr, mgr.c.user_id == EntraUser.manager_id, isouter=True)
+    q = q.where(key_col.is_not(None), *f.user_conds()).group_by(
+        key_col, *extra_group_cols, *user_cols
+    )
+
+    grouped: dict[Any, dict[str, Any]] = {}
+    for r in (await session.execute(q)).all():
+        g = grouped.setdefault(
+            r.group_key,
+            {"key": r.group_key, "name": r.group_name or r.group_key, "members": []},
+        )
+        g["members"].append(
+            {
+                "user_id": r.user_id,
+                "display_name": r.display_name or r.user_id,
+                "job_title": r.job_title,
+                "department": r.department,
+                "office_location": r.office_location,
+                "prompts": int(r.prompts or 0),
+                "conversations": int(r.conversations or 0),
+                "last_use": r.last_use.isoformat() if r.last_use else None,
+                "days_since_last": _days_since(r.last_use, today),
+            }
+        )
+
+    out: list[dict[str, Any]] = []
+    for g in grouped.values():
+        members: list[dict[str, Any]] = g["members"]
+        members.sort(key=lambda m: m[metric], reverse=True)
+        licensed = len(members)
+        total = sum(m[metric] for m in members)
+        active = sum(1 for m in members if m[metric] > 0)
+        avg = (total / licensed) if licensed else 0.0
+        threshold = avg * _LAGGARD_SHARE_OF_AVG
+
+        leaders = [m for m in members if m[metric] > 0][:per_group]
+        leader_ids = {m["user_id"] for m in leaders}
+        laggards = [
+            m
+            for m in sorted(members, key=lambda m: m[metric])
+            if m["user_id"] not in leader_ids
+            and (m[metric] == 0 or m[metric] < threshold)
+        ][:per_group]
+
+        # Pair each laggard with a leader, cycling if there are fewer leaders.
+        pairs = [
+            {
+                "leader": leaders[i % len(leaders)],
+                "laggard": lag,
+                "gap": leaders[i % len(leaders)][metric] - lag[metric],
+            }
+            for i, lag in enumerate(laggards)
+        ] if leaders and laggards else []
+
+        out.append(
+            {
+                "key": g["key"],
+                "name": g["name"],
+                "licensed": licensed,
+                "active": active,
+                "inactive": licensed - active,
+                "adoption_rate": round(100.0 * active / licensed, 1) if licensed else 0.0,
+                "total": total,
+                "avg": round(avg, 1),
+                "leaders": leaders,
+                "laggards": laggards,
+                "pairs": pairs,
+            }
+        )
+
+    # Biggest coaching opportunity first.
+    out.sort(key=lambda g: (len(g["pairs"]), g["inactive"], g["total"]), reverse=True)
+    return {
+        "group_by": group_by,
+        "group_label": PEER_GROUPS[group_by],
+        "metric": metric,
+        "groups": out,
+        "totals": {
+            "groups": len(out),
+            "groups_with_pairs": sum(1 for g in out if g["pairs"]),
+            "pairs": sum(len(g["pairs"]) for g in out),
+            "leaders": sum(len(g["leaders"]) for g in out),
+            "laggards": sum(len(g["laggards"]) for g in out),
+        },
     }
 
 

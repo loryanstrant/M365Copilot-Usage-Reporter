@@ -3,9 +3,12 @@ import * as echarts from "echarts";
 import { useTheme } from "../theme/ThemeContext";
 
 /**
- * Minimal ECharts wrapper. Re-renders on option/theme change, disposes on
- * unmount, and resizes with its container. Used for the richer visuals
- * (sunburst, radar) that Recharts doesn't cover.
+ * Minimal ECharts wrapper, used **by exception only** — for chart types Recharts
+ * doesn't cover (currently just the sunburst on the Locations page). Reach for
+ * Recharts first; see the charting section of the solution UI standard.
+ *
+ * Re-renders on option/theme change, disposes on unmount, and resizes with its
+ * container.
  */
 export default function EChart({
   option,

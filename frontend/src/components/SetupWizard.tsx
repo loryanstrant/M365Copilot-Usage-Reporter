@@ -1,36 +1,5 @@
 import { useState, type ReactNode } from "react";
-
-// A ready-to-run script that creates the app registration, adds the two
-// application permissions, grants admin consent, and prints the values to paste
-// below. Permission GUIDs are resolved by name at runtime so nothing is
-// hard-coded or can drift.
-const SETUP_SCRIPT = `# Run in PowerShell 7 with the Microsoft Graph SDK.
-# Requires a Global Administrator (or Privileged Role + Application admin).
-Install-Module Microsoft.Graph -Scope CurrentUser -Force  # first time only
-Connect-MgGraph -Scopes "Application.ReadWrite.All","AppRoleAssignment.ReadWrite.All"
-
-$graphSp = Get-MgServicePrincipal -Filter "appId eq '00000003-0000-0000-c000-000000000000'"
-$needed  = "AiEnterpriseInteraction.Read.All","Directory.Read.All"
-$roles   = $graphSp.AppRoles | Where-Object { $needed -contains $_.Value }
-
-$app = New-MgApplication -DisplayName "M365 Copilot Usage Reporter" -RequiredResourceAccess @{
-  ResourceAppId  = "00000003-0000-0000-c000-000000000000"
-  ResourceAccess = @($roles | ForEach-Object { @{ Id = $_.Id; Type = "Role" } })
-}
-$sp = New-MgServicePrincipal -AppId $app.AppId
-
-# Grant admin consent for both application permissions
-foreach ($r in $roles) {
-  New-MgServicePrincipalAppRoleAssignment -ServicePrincipalId $sp.Id \`
-    -PrincipalId $sp.Id -ResourceId $graphSp.Id -AppRoleId $r.Id | Out-Null
-}
-
-$secret = Add-MgApplicationPassword -ApplicationId $app.Id \`
-  -PasswordCredential @{ DisplayName = "reporter"; EndDateTime = (Get-Date).AddYears(1) }
-
-Write-Host "Tenant ID:     $((Get-MgContext).TenantId)"
-Write-Host "Client ID:     $($app.AppId)"
-Write-Host "Client secret: $($secret.SecretText)"`;
+import { SETUP_SCRIPT } from "../lib/setup";
 
 function CopyButton({ text, label = "Copy" }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false);

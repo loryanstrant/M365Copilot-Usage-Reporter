@@ -2,6 +2,13 @@ import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import type { Freshness } from "../api/types";
 import KpiCard from "../components/KpiCard";
+import SuiteBlock from "../components/SuiteBlock";
+
+interface AboutMeta {
+  version: string;
+  build_date: string;
+  build_time: string;
+}
 
 function fmt(value: string | null): string {
   if (!value) return "—";
@@ -23,11 +30,17 @@ function fmtDay(value: string | null): string {
 
 export default function AboutPage() {
   const [fresh, setFresh] = useState<Freshness | null>(null);
+  const [meta, setMeta] = useState<AboutMeta | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
         setFresh(await api<Freshness>("/metrics/freshness"));
+      } catch {
+        /* ignore */
+      }
+      try {
+        setMeta(await api<AboutMeta>("/metrics/about"));
       } catch {
         /* ignore */
       }
@@ -39,8 +52,35 @@ export default function AboutPage() {
       <div>
         <h1 className="text-2xl font-bold">About</h1>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          Data freshness and methodology.
+          What this tool does, how fresh the data is, and how the numbers are calculated.
         </p>
+      </div>
+
+      <div className="card p-6">
+        <h3 className="mb-3 text-sm font-semibold text-slate-700 dark:text-slate-200">
+          What this is
+        </h3>
+        <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">
+          The M365 Copilot Usage Reporter ingests Microsoft 365 Copilot usage from
+          Microsoft Graph and turns it into adoption reporting — who is using Copilot,
+          where, how often, and who has a licence but isn't getting value from it. It
+          replaces a Power Platform and Power BI solution with a self-hosted container
+          stack, so no data leaves your subscription and no Power BI licence is needed.
+        </p>
+        {meta && (
+          <p className="mt-4 text-xs text-slate-500 dark:text-slate-400">
+            Version <span className="font-semibold text-slate-700 dark:text-slate-200">
+              {meta.version}
+            </span>{" "}
+            · built{" "}
+            {new Date(meta.build_date).toLocaleDateString(undefined, {
+              year: "numeric",
+              month: "short",
+              day: "numeric",
+            })}
+            {meta.build_time ? ` at ${meta.build_time}` : ""}
+          </p>
+        )}
       </div>
 
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
@@ -58,13 +98,10 @@ export default function AboutPage() {
           <Row label="Earliest data" value={fmtDay(fresh?.earliest_prompt ?? null)} />
           <Row label="Most recent data" value={fmtDay(fresh?.latest_prompt ?? null)} />
           <Row
-            label="Last refreshed"
+            label="Last run"
             value={fresh?.last_run ? fmt(fresh.last_run.finished_at) : "—"}
           />
-          <Row
-            label="Refresh status"
-            value={fresh?.last_run?.status ?? "No refresh yet"}
-          />
+          <Row label="Run status" value={fresh?.last_run?.status ?? "No run yet"} />
         </dl>
       </div>
 
@@ -75,16 +112,22 @@ export default function AboutPage() {
         <ul className="list-inside list-disc space-y-1">
           <li>
             <span className="font-medium">Conversations</span> are distinct Copilot
-            sessions; <span className="font-medium">Prompts</span> are individual
+            sessions; <span className="font-medium">prompts</span> are individual
             interactions within them.
           </li>
           <li>Active users are those with at least one prompt in the last 30 days.</li>
           <li>
+            <span className="font-medium">Laggards</span> hold a Copilot licence but have
+            no prompts in the reporting window — the population worth coaching first.
+          </li>
+          <li>
             Data is sourced from Microsoft Graph enterprise interaction history and
-            refreshed on a schedule.
+            refreshed on a schedule you set in Settings.
           </li>
         </ul>
       </div>
+
+      <SuiteBlock />
 
       <div className="card flex items-center gap-4 p-6">
         <img
@@ -93,9 +136,7 @@ export default function AboutPage() {
           className="h-16 w-16 rounded-full object-cover"
         />
         <div>
-          <div className="text-xs uppercase tracking-wide text-slate-400">
-            Created by
-          </div>
+          <div className="text-xs uppercase tracking-wide text-slate-400">Created by</div>
           <a
             href="https://www.loryanstrant.com"
             target="_blank"
@@ -122,6 +163,10 @@ export default function AboutPage() {
             </a>
           </div>
         </div>
+      </div>
+
+      <div className="text-xs text-slate-400 dark:text-slate-500">
+        MIT-licensed. Community project — no Microsoft support agreement or SLA.
       </div>
     </div>
   );

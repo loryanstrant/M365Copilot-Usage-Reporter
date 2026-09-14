@@ -1,0 +1,46 @@
+# Development override. Use with:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# Builds locally instead of pulling, bind-mounts the source so edits take
+# effect immediately, enables uvicorn --reload, and brings up the Vite dev
+# server for SPA hot-reload. Production serves the SPA from the API instead.
+
+services:
+  api:
+    build:
+      context: .
+      target: api
+    image: m365copilot-usage-reporter-api:dev
+    restart: "no"
+    volumes:
+      - .:/app
+    command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  worker:
+    build:
+      context: .
+      target: worker
+    image: m365copilot-usage-reporter-worker:dev
+    restart: "no"
+    volumes:
+      - .:/app
+
+  frontend:
+    image: node:20-alpine
+    working_dir: /app/frontend
+    environment:
+      VITE_PROXY_TARGET: http://api:8000
+      # Browser-visible host port, so Vite aims its HMR websocket correctly
+      # when the dev server is remapped away from 5173.
+      WEB_PORT: ${WEB_PORT:-5173}
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
+    ports:
+      - "${WEB_PORT:-5173}:5173"
+    depends_on:
+      - api
+    volumes:
+      - ./frontend:/app/frontend
+      - frontend_node_modules:/app/frontend/node_modules
+
+volumes:
+  frontend_node_modules:

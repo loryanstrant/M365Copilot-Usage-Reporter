@@ -6,6 +6,8 @@ import type { LaggardRow, LaggardsData } from "../api/types";
 import ChartCard from "../components/ChartCard";
 import ChartTooltip from "../components/ChartTooltip";
 import DataTable, { type Column } from "../components/DataTable";
+import FilterBar from "../components/FilterBar";
+import { filterDeps, metricsQuery, useFilters } from "../filters/FiltersContext";
 
 const LAGGARD_COLUMNS: Column<LaggardRow>[] = [
   { key: "user", header: "User", type: "text", accessor: (u) => u.display_name },
@@ -17,17 +19,19 @@ const LAGGARD_COLUMNS: Column<LaggardRow>[] = [
 ];
 
 export default function LaggardsPage() {
+  const filters = useFilters();
   const [data, setData] = useState<LaggardsData | null>(null);
 
   useEffect(() => {
     (async () => {
       try {
-        setData(await api<LaggardsData>("/metrics/laggards"));
+        const q = metricsQuery(filters);
+        setData(await api<LaggardsData>(`/metrics/laggards${q}`));
       } catch {
         /* ignore */
       }
     })();
-  }, []);
+  }, [filterDeps(filters)]);
 
   const users = data?.users ?? [];
   const inactive = users.filter((u) => u.inactive);
@@ -61,6 +65,8 @@ export default function LaggardsPage() {
           Export CSV
         </button>
       </div>
+
+      <FilterBar />
 
       <div className="grid gap-5 sm:grid-cols-3">
         <div className="card p-5">

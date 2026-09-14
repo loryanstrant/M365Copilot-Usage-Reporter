@@ -254,6 +254,55 @@ export interface CopilotScore {
   score: number;
 }
 
+// --- coaching pairs page ------------------------------------------------
+export type PeerGroupBy = "department" | "office_location" | "manager";
+
+export interface PeerMember {
+  user_id: string;
+  display_name: string;
+  job_title: string | null;
+  department: string | null;
+  office_location: string | null;
+  prompts: number;
+  conversations: number;
+  last_use: string | null;
+  days_since_last: number | null;
+}
+
+export interface CoachingPair {
+  leader: PeerMember;
+  laggard: PeerMember;
+  gap: number;
+}
+
+export interface PeerGroup {
+  key: string;
+  name: string;
+  licensed: number;
+  active: number;
+  inactive: number;
+  adoption_rate: number;
+  total: number;
+  avg: number;
+  leaders: PeerMember[];
+  laggards: PeerMember[];
+  pairs: CoachingPair[];
+}
+
+export interface CoachingPairsData {
+  group_by: PeerGroupBy;
+  group_label: string;
+  metric: "prompts" | "conversations";
+  groups: PeerGroup[];
+  totals: {
+    groups: number;
+    groups_with_pairs: number;
+    pairs: number;
+    leaders: number;
+    laggards: number;
+  };
+}
+
 export interface BreakdownRow {
   d1: string | null;
   d2: string | null;

@@ -19,7 +19,7 @@ RUN pip install --upgrade pip \
         "fastapi>=0.115" "uvicorn[standard]>=0.30" "sqlalchemy>=2.0" "alembic>=1.13" \
         "httpx>=0.27" "msal>=1.30" "apscheduler>=3.10" "pydantic>=2.7" \
         "pydantic-settings>=2.3" "psycopg[binary]>=3.2" "cryptography>=42" \
-        "python-jose[cryptography]>=3.3" "bcrypt>=4.1" "python-multipart>=0.0.9"
+        "pyjwt>=2.9" "bcrypt>=4.1" "python-multipart>=0.0.9"
 
 COPY . .
 

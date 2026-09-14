@@ -1,6 +1,19 @@
+# Production stack.
+#
+# Runs prebuilt images with no bind mounts and no auto-reload. The API image
+# bakes the built SPA in and serves it directly, so production has no separate
+# frontend service and no web port — the dashboard is on ${API_PORT}.
+#
+# For local development, layer the dev override on top:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# Host ports are unique per solution so all four can run side by side.
+# This one: Postgres 5432, API 8000. See .env.example.
+
 services:
   db:
     image: postgres:16
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-copilot}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-copilot}
@@ -16,9 +29,13 @@ services:
       retries: 10
 
   api:
+    # Defaults to the public GHCR image. Override API_IMAGE to run an image
+    # built elsewhere, or build locally with `docker compose build`.
+    image: ${API_IMAGE:-ghcr.io/loryanstrant/m365copilot-usage-reporter/api:latest}
     build:
       context: .
       target: api
+    restart: unless-stopped
     env_file: .env
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://copilot:copilot@db:5432/copilot}
@@ -27,40 +44,19 @@ services:
         condition: service_healthy
     ports:
       - "${API_PORT:-8000}:8000"
-    volumes:
-      - .:/app
-    command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
   worker:
+    image: ${WORKER_IMAGE:-ghcr.io/loryanstrant/m365copilot-usage-reporter/worker:latest}
     build:
       context: .
       target: worker
+    restart: unless-stopped
     env_file: .env
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://copilot:copilot@db:5432/copilot}
     depends_on:
       db:
         condition: service_healthy
-    volumes:
-      - .:/app
-
-  frontend:
-    image: node:20-alpine
-    working_dir: /app/frontend
-    environment:
-      VITE_PROXY_TARGET: http://api:8000
-      # Browser-visible port (host side), so Vite points its HMR websocket at
-      # the right port when you remap the frontend to something other than 5173.
-      FRONTEND_PORT: ${FRONTEND_PORT:-5173}
-    command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 5173"
-    ports:
-      - "${FRONTEND_PORT:-5173}:5173"
-    depends_on:
-      - api
-    volumes:
-      - ./frontend:/app/frontend
-      - frontend_node_modules:/app/frontend/node_modules
 
 volumes:
   pgdata:
-  frontend_node_modules:

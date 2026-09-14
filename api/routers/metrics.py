@@ -116,10 +116,28 @@ async def get_leaderboard_rollups(
 
 @router.get("/laggards")
 async def get_laggards(
+    filters: MetricFilters = Depends(get_filters),
     limit: int = Query(default=200, ge=1, le=1000),
     session: AsyncSession = Depends(get_session),
 ):
-    return await metrics.laggards(session, limit=limit)
+    return await metrics.laggards(session, filters=filters, limit=limit)
+
+
+@router.get("/coaching-pairs")
+async def get_coaching_pairs(
+    group_by: str = Query(default="department"),
+    metric: str = Query(default="prompts"),
+    per_group: int = Query(default=3, ge=1, le=10),
+    filters: MetricFilters = Depends(get_filters),
+    session: AsyncSession = Depends(get_session),
+):
+    return await metrics.coaching_pairs(
+        session,
+        filters=filters,
+        group_by=group_by,
+        metric=metric,
+        per_group=per_group,
+    )
 
 
 @router.get("/locations")
@@ -174,3 +192,15 @@ async def get_licenses(session: AsyncSession = Depends(get_session)):
 @router.get("/freshness")
 async def get_freshness(session: AsyncSession = Depends(get_session)):
     return await metrics.freshness(session)
+
+
+@router.get("/about")
+async def get_about() -> dict:
+    """Version and build metadata for the About page."""
+    from shared.version import APP_VERSION, BUILD_DATE, BUILD_TIME
+
+    return {
+        "version": APP_VERSION,
+        "build_date": BUILD_DATE,
+        "build_time": BUILD_TIME,
+    }

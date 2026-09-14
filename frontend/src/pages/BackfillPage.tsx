@@ -200,7 +200,7 @@ export default function BackfillPage() {
             disabled={usersRunning || running}
             className="btn-secondary whitespace-nowrap"
           >
-            {usersRunning ? "Extracting…" : "Refresh users"}
+            {usersRunning ? "Running…" : "Run user sync"}
           </button>
         </div>
 
@@ -227,7 +227,7 @@ export default function BackfillPage() {
 
         {noUsers && !usersRunning && (
           <div className="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:bg-amber-900/20 dark:text-amber-400">
-            No licensed users have been extracted yet. Click <strong>Refresh users</strong>{" "}
+            No licensed users have been extracted yet. Select <strong>Run user sync</strong>{" "}
             first — otherwise a backfill has no one to pull history for. (A backfill will do
             this automatically, but running it here lets you confirm the count first.)
           </div>
