@@ -4,6 +4,8 @@ export interface AppConfig {
   has_client_secret: boolean;
   copilot_sku_ids: string[];
   report_access_group_id: string | null;
+  /** Members may see organisation-wide data. Null = open to all signed-in users. */
+  org_view_group_id: string | null;
   backfill_days: number;
   schedule_cron: string | null;
   schedule_interval_hours: number;

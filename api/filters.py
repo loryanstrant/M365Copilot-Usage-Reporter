@@ -36,6 +36,10 @@ class MetricFilters:
     chat_types: list[str] = field(default_factory=list)
     conversation_locations: list[str] = field(default_factory=list)
     user_search: str | None = None
+    # Restrict to specific people by Entra object ID. The personal view sets
+    # this from the signed-in user's token, so it never widens: whatever else is
+    # filtered, the caller only ever sees their own rows.
+    user_ids: list[str] = field(default_factory=list)
 
     def prompt_conds(self) -> list[Any]:
         """Conditions applied directly to the ``prompts`` table."""
@@ -52,6 +56,8 @@ class MetricFilters:
             conds.append(
                 Prompt.conversation_location.in_(_clean(self.conversation_locations))
             )
+        if _clean(self.user_ids):
+            conds.append(Prompt.user_id.in_(_clean(self.user_ids)))
         return conds
 
     def user_conds(self) -> list[Any]:

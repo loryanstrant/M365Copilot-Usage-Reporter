@@ -59,6 +59,7 @@ def _to_out(cfg: AppConfig | None) -> AppConfigOut:
         has_client_secret=bool(cfg.client_secret_encrypted),
         copilot_sku_ids=list(cfg.copilot_sku_ids or []),
         report_access_group_id=cfg.report_access_group_id,
+        org_view_group_id=cfg.org_view_group_id,
         backfill_days=cfg.backfill_days,
         schedule_cron=cfg.schedule_cron,
         schedule_interval_hours=cfg.schedule_interval_hours or 24,
@@ -101,6 +102,8 @@ async def put_config(
         cfg.copilot_sku_ids = [s.strip() for s in body.copilot_sku_ids if s.strip()]
     if body.report_access_group_id is not None:
         cfg.report_access_group_id = body.report_access_group_id.strip() or None
+    if body.org_view_group_id is not None:
+        cfg.org_view_group_id = body.org_view_group_id.strip() or None
     if body.backfill_days is not None:
         cfg.backfill_days = body.backfill_days
     if body.schedule_cron is not None:

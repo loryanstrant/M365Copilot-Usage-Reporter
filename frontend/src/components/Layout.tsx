@@ -13,6 +13,15 @@ function navClass({ isActive }: { isActive: boolean }): string {
   ].join(" ");
 }
 
+/** Groups the sidebar into "You" and "Organisation" so the split is obvious. */
+function NavSectionLabel({ children }: { children: ReactNode }) {
+  return (
+    <div className="px-3 pb-1 pt-4 text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">
+      {children}
+    </div>
+  );
+}
+
 export default function Layout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const { theme, toggle } = useTheme();
@@ -33,30 +42,46 @@ export default function Layout({ children }: { children: ReactNode }) {
           </div>
         </div>
         <nav className="flex-1 space-y-1 px-3">
-          <NavLink to="/" className={navClass} end>
-            Overview
-          </NavLink>
-          <NavLink to="/briefing" className={navClass}>
-            Executive briefing
-          </NavLink>
-          <NavLink to="/usage" className={navClass}>
-            Usage
-          </NavLink>
-          <NavLink to="/locations" className={navClass}>
-            Where it's used
-          </NavLink>
-          <NavLink to="/leaderboards" className={navClass}>
-            Leaderboards
-          </NavLink>
-          <NavLink to="/laggards" className={navClass}>
-            Laggards
-          </NavLink>
-          <NavLink to="/coaching" className={navClass}>
-            Coaching pairs
-          </NavLink>
-          <NavLink to="/licenses" className={navClass}>
-            Licenses
-          </NavLink>
+          {user?.has_personal_view && (
+            <>
+              <NavSectionLabel>You</NavSectionLabel>
+              <NavLink to="/me" className={navClass}>
+                Your Copilot usage
+              </NavLink>
+            </>
+          )}
+
+          {user?.can_view_org && (
+            <>
+              <NavSectionLabel>Organisation</NavSectionLabel>
+              <NavLink to="/overview" className={navClass}>
+                Overview
+              </NavLink>
+              <NavLink to="/briefing" className={navClass}>
+                Executive briefing
+              </NavLink>
+              <NavLink to="/usage" className={navClass}>
+                Usage
+              </NavLink>
+              <NavLink to="/locations" className={navClass}>
+                Where it's used
+              </NavLink>
+              <NavLink to="/leaderboards" className={navClass}>
+                Leaderboards
+              </NavLink>
+              <NavLink to="/laggards" className={navClass}>
+                Laggards
+              </NavLink>
+              <NavLink to="/coaching" className={navClass}>
+                Coaching pairs
+              </NavLink>
+              <NavLink to="/licenses" className={navClass}>
+                Licenses
+              </NavLink>
+            </>
+          )}
+
+          <NavSectionLabel>Help</NavSectionLabel>
           {user?.role === "admin" && (
             <NavLink to="/settings" className={navClass}>
               Settings

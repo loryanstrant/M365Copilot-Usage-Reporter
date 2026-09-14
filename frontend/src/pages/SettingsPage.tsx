@@ -50,6 +50,7 @@ export default function SettingsPage() {
   const [skuIds, setSkuIds] = useState(DEFAULT_SKU);
   const [scheduleHours, setScheduleHours] = useState(24);
   const [groupId, setGroupId] = useState("");
+  const [orgGroupId, setOrgGroupId] = useState("");
   const [redirectUri, setRedirectUri] = useState("");
 
   function applyConfig(cfg: AppConfig) {
@@ -59,6 +60,7 @@ export default function SettingsPage() {
     setSkuIds((cfg.copilot_sku_ids ?? []).join(", ") || DEFAULT_SKU);
     setScheduleHours(cfg.schedule_interval_hours ?? 24);
     setGroupId(cfg.report_access_group_id ?? "");
+    setOrgGroupId(cfg.org_view_group_id ?? "");
   }
 
   async function refreshStatus() {
@@ -102,6 +104,7 @@ export default function SettingsPage() {
         copilot_sku_ids: skuIds.split(",").map((s) => s.trim()).filter(Boolean),
         schedule_interval_hours: scheduleHours,
         report_access_group_id: groupId,
+        org_view_group_id: orgGroupId,
       };
       if (clientSecret) payload.client_secret = clientSecret;
       const cfg = await api<AppConfig>("/admin/config", {
@@ -283,6 +286,17 @@ export default function SettingsPage() {
             <input
               value={groupId}
               onChange={(e) => setGroupId(e.target.value)}
+              className="input"
+            />
+          </Field>
+
+          <Field
+            label="Organisation view group ID"
+            hint="Optional Entra security group whose members may see organisation-wide reporting. Everyone else sees only their own activity. Leave blank to let any signed-in user see organisation data. Administrators always can."
+          >
+            <input
+              value={orgGroupId}
+              onChange={(e) => setOrgGroupId(e.target.value)}
               className="input"
             />
           </Field>

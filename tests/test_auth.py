@@ -66,9 +66,16 @@ async def test_admin_config_roundtrip_secret_write_only(session):
         token = await _login(client, "admin", "pw")
         headers = {"Authorization": f"Bearer {token}"}
 
-        # /auth/me reflects the role
+        # /auth/me reflects the role and what this user can reach. The admin
+        # signs in with a password, so there is no Entra identity behind them
+        # and therefore no personal view — but they always see org data.
         me = await client.get("/auth/me", headers=headers)
-        assert me.json() == {"username": "admin", "role": "admin"}
+        assert me.json() == {
+            "username": "admin",
+            "role": "admin",
+            "can_view_org": True,
+            "has_personal_view": False,
+        }
 
         # Save config including a client secret
         resp = await client.put(
