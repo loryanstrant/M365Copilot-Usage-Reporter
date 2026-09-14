@@ -87,9 +87,6 @@ export default function Layout({ children }: { children: ReactNode }) {
               Settings
             </NavLink>
           )}
-          <NavLink to="/help" className={navClass}>
-            Setup guide
-          </NavLink>
           <NavLink to="/about" className={navClass}>
             About
           </NavLink>

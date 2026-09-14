@@ -63,6 +63,14 @@ jobs:
             type=ref,event=tag
             type=sha,format=short
 
+      # The image carries no build date of its own; whatever we inject here is
+      # what the About page shows. Nothing is invented downstream.
+      - name: Compute build stamp
+        id: stamp
+        run: |
+          echo "date=$(date -u +'%Y-%m-%d')" >> "$GITHUB_OUTPUT"
+          echo "time=$(date -u +'%H:%M UTC')" >> "$GITHUB_OUTPUT"
+
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
@@ -72,5 +80,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            BUILD_DATE=${{ steps.stamp.outputs.date }}
+            BUILD_TIME=${{ steps.stamp.outputs.time }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

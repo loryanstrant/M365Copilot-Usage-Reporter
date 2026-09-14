@@ -35,9 +35,25 @@ RUN npm run build
 FROM base AS api
 # Bake the built SPA into the image so FastAPI serves it in production.
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
+# Build stamp, injected by .github/workflows/publish-images.yml. Left unset for
+# local builds so the About page says "development build" instead of quoting a
+# date nobody chose.
+ARG BUILD_DATE
+ARG BUILD_TIME
+ENV BUILD_DATE=$BUILD_DATE \
+    BUILD_TIME=$BUILD_TIME
+
 EXPOSE 8000
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 # ---- Worker image ----
 FROM base AS worker
+# Build stamp, injected by .github/workflows/publish-images.yml. Left unset for
+# local builds so the About page says "development build" instead of quoting a
+# date nobody chose.
+ARG BUILD_DATE
+ARG BUILD_TIME
+ENV BUILD_DATE=$BUILD_DATE \
+    BUILD_TIME=$BUILD_TIME
+
 CMD ["python", "-m", "worker.main"]

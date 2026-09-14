@@ -6,8 +6,23 @@ import SuiteBlock from "../components/SuiteBlock";
 
 interface AboutMeta {
   version: string;
-  build_date: string;
-  build_time: string;
+  build_date: string | null;
+  build_time: string | null;
+}
+
+/** No injected stamp means no build date. Saying "development build" is honest;
+ *  printing a made-up date is not. */
+function buildStamp(date: string | null, time: string | null): string {
+  if (!date) return "development build";
+  const parsed = new Date(date);
+  const day = Number.isNaN(parsed.getTime())
+    ? date
+    : parsed.toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+  return `built ${day}${time ? ` at ${time}` : ""}`;
 }
 
 function fmt(value: string | null): string {
@@ -72,13 +87,7 @@ export default function AboutPage() {
             Version <span className="font-semibold text-slate-700 dark:text-slate-200">
               {meta.version}
             </span>{" "}
-            · built{" "}
-            {new Date(meta.build_date).toLocaleDateString(undefined, {
-              year: "numeric",
-              month: "short",
-              day: "numeric",
-            })}
-            {meta.build_time ? ` at ${meta.build_time}` : ""}
+            · {buildStamp(meta.build_date, meta.build_time)}
           </p>
         )}
       </div>
