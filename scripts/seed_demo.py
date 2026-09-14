@@ -52,25 +52,69 @@ _TITLES = [
     "Director", "Coordinator", "Specialist",
 ]
 
-# App mix weighted to look like a real tenant — Teams and Word dominate.
+# The apps that surface Copilot interactions, with a baseline share of the mix
+# and a per-app trajectory. Trajectory is a multiplier applied across the window:
+# >1 means adoption is climbing over the period, <1 means it is slipping, 1.0 is
+# flat. Without this every series is the same global volume curve scaled down,
+# so every app appears to move in lockstep — which looks synthetic and hides the
+# thing these charts exist to show.
 _APPS = [
-    ("Microsoft Teams", 30),
-    ("Word", 20),
-    ("Outlook", 18),
-    ("PowerPoint", 10),
-    ("Excel", 8),
-    ("Copilot Chat", 7),
-    ("OneNote", 3),
-    ("Loop", 2),
-    ("SharePoint", 2),
+    # (name, baseline weight, trajectory)
+    ("Microsoft Teams", 26, 1.6),
+    ("Word", 18, 1.2),
+    ("Outlook", 16, 1.0),
+    ("Copilot Chat", 12, 2.2),
+    ("PowerPoint", 9, 0.45),
+    ("Excel", 8, 1.4),
+    ("OneNote", 4, 0.3),
+    ("Loop", 3, 1.9),
+    ("SharePoint", 3, 1.1),
+    ("OneDrive", 3, 0.6),
+    ("Whiteboard", 2, 0.4),
+    ("Forms", 2, 1.3),
+    ("Planner", 2, 1.5),
+    ("Stream", 2, 0.25),
+    ("Viva Engage", 1, 1.2),
+    ("Designer", 1, 1.7),
 ]
+
+# Teams interactions carry where in Teams they happened. Previously every row
+# said "Teams", so the breakdown had a single bar and told you nothing.
+_TEAMS_LOCATIONS = [("Chat", 50), ("Meetings", 32), ("Channels", 18)]
+
+# Where a referenced file lived. Previously always NULL, so the file-location
+# breakdown was permanently empty.
+_FILE_LOCATIONS = [("SharePoint", 62), ("OneDrive", 38)]
+
 _CHAT_TYPES = ["groupChat", "oneOnOne", "meeting", "channel"]
 _CONVERSATION_TYPES = ["appchat", "webchat", "inline"]
 
+# Apps where referencing a stored document is plausible. Copilot Chat and the
+# social/creative surfaces mostly do not, so leaving them out keeps the mix
+# believable rather than attaching a file to everything.
+_FILE_CAPABLE = {
+    "Word", "Excel", "PowerPoint", "OneNote", "Loop",
+    "SharePoint", "OneDrive", "Microsoft Teams",
+}
 
-def _weighted_app(rng: random.Random) -> str:
-    names = [a for a, _ in _APPS]
-    weights = [w for _, w in _APPS]
+
+def _pick(rng: random.Random, options: list[tuple[str, int]]) -> str:
+    return rng.choices([o for o, _ in options], weights=[w for _, w in options], k=1)[0]
+
+
+def _weighted_app(rng: random.Random, progress: float) -> str:
+    """Pick an app, with each app's share shifted by its own trajectory.
+
+    ``progress`` runs 0.0 at the oldest seeded day to 1.0 at today. An app with
+    trajectory 2.0 ends the window at roughly twice its starting share; one at
+    0.5 ends at half. Interpolating rather than switching keeps the day-to-day
+    series smooth instead of stepping.
+    """
+    names: list[str] = []
+    weights: list[float] = []
+    for name, base, trajectory in _APPS:
+        names.append(name)
+        weights.append(base * (1.0 + (trajectory - 1.0) * progress))
     return rng.choices(names, weights=weights, k=1)[0]
 
 
@@ -107,7 +151,41 @@ def _make_users(rng: random.Random, count: int) -> list[EntraUser]:
     return users
 
 
-async def seed(days: int = 45, users: int = 40, reset: bool = True) -> dict[str, int]:
+def _adoption_profiles(
+    rng: random.Random, licensed: list[EntraUser]
+) -> dict[str, float]:
+    """Give each licensed person an adoption level, spread within their team.
+
+    Coaching pairs are formed *within* a department: the view needs a heavy user
+    and a barely-started one sitting in the same team. Drawing everyone from one
+    distribution leaves that to chance, and with a small population most
+    departments ended up with neither extreme — which is why the demo only ever
+    produced a single pair.
+
+    So the spread is dealt deliberately: every department with enough people gets
+    at least one enthusiast and at least one licensed user who has never touched
+    Copilot, with the rest in between.
+    """
+    by_dept: dict[str, list[EntraUser]] = {}
+    for user in licensed:
+        by_dept.setdefault(user.department or "Unassigned", []).append(user)
+
+    profiles: dict[str, float] = {}
+    for members in by_dept.values():
+        rng.shuffle(members)
+        for position, user in enumerate(members):
+            if position == 0 and len(members) >= 3:
+                profiles[user.user_id] = rng.uniform(1.6, 2.2)   # champion
+            elif position == 1 and len(members) >= 3:
+                profiles[user.user_id] = 0.0                     # never started
+            elif position == 2 and len(members) >= 6:
+                profiles[user.user_id] = rng.uniform(0.15, 0.35)  # struggling
+            else:
+                profiles[user.user_id] = rng.uniform(0.5, 1.3)
+    return profiles
+
+
+async def seed(days: int = 45, users: int = 90, reset: bool = True) -> dict[str, int]:
     """Populate the usage tables with plausible fictional data.
 
     Returns a stats dict so callers (CLI and the admin endpoint) can report
@@ -117,6 +195,7 @@ async def seed(days: int = 45, users: int = 40, reset: bool = True) -> dict[str,
 
     directory = _make_users(rng, users)
     licensed = [u for u in directory if u.has_copilot_license]
+    profiles = _adoption_profiles(rng, licensed)
     today = date.today()
     now = datetime.now(timezone.utc)
 
@@ -125,6 +204,8 @@ async def seed(days: int = 45, users: int = 40, reset: bool = True) -> dict[str,
 
     for day_offset in range(days):
         day = today - timedelta(days=day_offset)
+        # 0.0 at the oldest seeded day, 1.0 today — drives each app's trajectory.
+        progress = 1.0 - (day_offset / max(1, days - 1))
         # Weekends are quiet; recent weeks are busier than older ones so the
         # trend lines have a visible upward slope.
         if day.weekday() >= 5:
@@ -134,13 +215,26 @@ async def seed(days: int = 45, users: int = 40, reset: bool = True) -> dict[str,
             active_share = 0.55 * max(0.35, ramp)
 
         for user in licensed:
-            if rng.random() > active_share:
+            # Someone's own adoption level scales their chance of showing up at
+            # all, so champions appear most days and the never-started never do.
+            appetite = profiles.get(user.user_id, 1.0)
+            if appetite <= 0.0 or rng.random() > min(0.95, active_share * appetite):
                 continue
             for _ in range(rng.randint(1, 4)):
                 conversations += 1
                 conversation_id = str(uuid.uuid4())
-                app = _weighted_app(rng)
-                chat_type = rng.choice(_CHAT_TYPES) if app == "Microsoft Teams" else None
+                app = _weighted_app(rng, progress)
+                is_teams = app == "Microsoft Teams"
+                chat_type = rng.choice(_CHAT_TYPES) if is_teams else None
+                teams_location = _pick(rng, _TEAMS_LOCATIONS) if is_teams else None
+                # Not every interaction references a document; roughly half of
+                # those that could do, so the breakdown has shape without
+                # implying every prompt touches a file.
+                file_location = (
+                    _pick(rng, _FILE_LOCATIONS)
+                    if app in _FILE_CAPABLE and rng.random() < 0.45
+                    else None
+                )
                 for _ in range(rng.randint(1, 5)):
                     prompts.append(
                         Prompt(
@@ -152,8 +246,8 @@ async def seed(days: int = 45, users: int = 40, reset: bool = True) -> dict[str,
                             conversation_type=rng.choice(_CONVERSATION_TYPES),
                             conversation_location=app,
                             chat_type=chat_type,
-                            file_location=None,
-                            teams_location="Teams" if app == "Microsoft Teams" else None,
+                            file_location=file_location,
+                            teams_location=teams_location,
                             raw_json={"demo": True},
                             ingested_at=now,
                         )
