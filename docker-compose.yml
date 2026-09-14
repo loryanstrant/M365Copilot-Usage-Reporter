@@ -29,8 +29,8 @@ services:
       retries: 10
 
   api:
-    # Defaults to the public GHCR image. Point API_IMAGE at the Gitea registry
-    # to run the internally built one instead — see .env.example.
+    # Defaults to the public GHCR image. Override API_IMAGE to run an image
+    # built elsewhere, or build locally with `docker compose build`.
     image: ${API_IMAGE:-ghcr.io/loryanstrant/m365copilot-usage-reporter/api:latest}
     build:
       context: .
