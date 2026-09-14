@@ -15,6 +15,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.auth import CurrentUser, require_admin
+from api.oidc import reset_app_cache, reset_group_cache
 from api.schemas import (
     AppConfigIn,
     AppConfigOut,
@@ -110,6 +111,10 @@ async def put_config(
 
     await session.commit()
     await session.refresh(cfg)
+    # Credentials or the access group may have changed, so drop anything cached
+    # against the old values rather than serving stale sign-in decisions.
+    reset_app_cache()
+    reset_group_cache()
     return _to_out(cfg)
 
 

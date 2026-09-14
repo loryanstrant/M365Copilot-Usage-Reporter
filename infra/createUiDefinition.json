@@ -102,7 +102,7 @@
             "visible": true,
             "options": {
               "icon": "Info",
-              "text": "Defaults are fine for most deployments. If deployment fails with \"The value of the 'Version' should be in: []\", your subscription is not permitted to create a PostgreSQL flexible server in the selected region — change the region on the Basics tab (the form warns you there). The version/size options below rarely need changing."
+              "text": "Defaults are fine for most deployments. If deployment fails with \"The value of the 'Version' should be in: []\", your subscription is not permitted to create a PostgreSQL flexible server in the selected region \u2014 change the region on the Basics tab (the form warns you there). The version/size options below rarely need changing."
             }
           },
           {
@@ -129,9 +129,18 @@
             "toolTip": "PostgreSQL major version to provision. 16 is the recommended default.",
             "constraints": {
               "allowedValues": [
-                { "label": "16", "value": "16" },
-                { "label": "15", "value": "15" },
-                { "label": "14", "value": "14" }
+                {
+                  "label": "16",
+                  "value": "16"
+                },
+                {
+                  "label": "15",
+                  "value": "15"
+                },
+                {
+                  "label": "14",
+                  "value": "14"
+                }
               ],
               "required": true
             }
@@ -144,9 +153,18 @@
             "toolTip": "Burstable is cheapest. Switch to General Purpose if your region lacks Burstable capacity.",
             "constraints": {
               "allowedValues": [
-                { "label": "Burstable (cheapest)", "value": "Burstable" },
-                { "label": "General Purpose", "value": "GeneralPurpose" },
-                { "label": "Memory Optimized", "value": "MemoryOptimized" }
+                {
+                  "label": "Burstable (cheapest)",
+                  "value": "Burstable"
+                },
+                {
+                  "label": "General Purpose",
+                  "value": "GeneralPurpose"
+                },
+                {
+                  "label": "Memory Optimized",
+                  "value": "MemoryOptimized"
+                }
               ],
               "required": true
             }
@@ -168,91 +186,6 @@
             }
           }
         ]
-      },
-      {
-        "name": "auth",
-        "label": "Authentication",
-        "elements": [
-          {
-            "name": "authInfo",
-            "type": "Microsoft.Common.InfoBox",
-            "visible": true,
-            "options": {
-              "icon": "Info",
-              "text": "By default the dashboard is protected by the admin password you set. You can additionally enable Entra ID single sign-on so colleagues can view it with their work account (read-only). You can turn this on now, or later from the api Container App's Authentication blade — leave it off to decide later."
-            }
-          },
-          {
-            "name": "enableEntraAuth",
-            "type": "Microsoft.Common.OptionsGroup",
-            "label": "Enable Entra ID single sign-on",
-            "defaultValue": "No",
-            "toolTip": "When enabled, signed-in Entra users get a read-only viewer role. Administration stays behind the password.",
-            "constraints": {
-              "required": true,
-              "allowedValues": [
-                { "label": "No (admin password only)", "value": "false" },
-                { "label": "Yes (add Entra SSO)", "value": "true" }
-              ]
-            }
-          },
-          {
-            "name": "entraClientId",
-            "type": "Microsoft.Common.TextBox",
-            "label": "App registration client ID",
-            "toolTip": "Application (client) ID of the Entra app registration used for sign-in. You can reuse the reporter's own app registration.",
-            "visible": "[equals(steps('auth').enableEntraAuth, 'true')]",
-            "constraints": {
-              "required": "[equals(steps('auth').enableEntraAuth, 'true')]",
-              "validations": [
-                {
-                  "regex": "^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$",
-                  "message": "A GUID, e.g. 00000000-0000-0000-0000-000000000000."
-                }
-              ]
-            }
-          },
-          {
-            "name": "entraClientSecret",
-            "type": "Microsoft.Common.PasswordBox",
-            "label": {
-              "password": "App registration client secret",
-              "confirmPassword": "Confirm client secret"
-            },
-            "toolTip": "A client secret value for the sign-in app registration.",
-            "visible": "[equals(steps('auth').enableEntraAuth, 'true')]",
-            "constraints": {
-              "required": "[equals(steps('auth').enableEntraAuth, 'true')]"
-            },
-            "options": { "hideConfirmation": true }
-          },
-          {
-            "name": "entraTenantId",
-            "type": "Microsoft.Common.TextBox",
-            "label": "Directory (tenant) ID",
-            "defaultValue": "[subscription().tenantId]",
-            "toolTip": "Tenant that issues sign-in tokens. Defaults to the deployment tenant.",
-            "visible": "[equals(steps('auth').enableEntraAuth, 'true')]",
-            "constraints": {
-              "required": "[equals(steps('auth').enableEntraAuth, 'true')]",
-              "validations": [
-                {
-                  "regex": "^[0-9a-fA-F]{8}-([0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$",
-                  "message": "A GUID, e.g. 00000000-0000-0000-0000-000000000000."
-                }
-              ]
-            }
-          },
-          {
-            "name": "entraRedirectNote",
-            "type": "Microsoft.Common.InfoBox",
-            "visible": "[equals(steps('auth').enableEntraAuth, 'true')]",
-            "options": {
-              "icon": "Warning",
-              "text": "After deployment, add the redirect URI shown in the deployment's 'entraRedirectUriToRegister' output to your app registration (Authentication → Web). If you gate access by a security group, also add a groups claim under the app registration's Token configuration."
-            }
-          }
-        ]
       }
     ],
     "outputs": {
@@ -263,11 +196,7 @@
       "imageTag": "[steps('advanced').imageTag]",
       "postgresVersion": "[steps('advanced').postgresVersion]",
       "postgresSkuName": "[steps('advanced').postgresSkuName]",
-      "postgresSkuTier": "[steps('advanced').postgresSkuTier]",
-      "enableEntraAuth": "[bool(steps('auth').enableEntraAuth)]",
-      "entraClientId": "[if(equals(steps('auth').enableEntraAuth, 'true'), steps('auth').entraClientId, '')]",
-      "entraClientSecret": "[if(equals(steps('auth').enableEntraAuth, 'true'), steps('auth').entraClientSecret, '')]",
-      "entraTenantId": "[if(equals(steps('auth').enableEntraAuth, 'true'), steps('auth').entraTenantId, subscription().tenantId)]"
+      "postgresSkuTier": "[steps('advanced').postgresSkuTier]"
     }
   }
 }

@@ -21,16 +21,6 @@ param adminUsername string
 @secure()
 param adminPassword string
 
-@description('Enable Entra ID single sign-on (Container Apps Easy Auth). When false, only the admin password is used.')
-param enableEntraAuth bool = false
-@description('Application (client) ID of the app registration used for Entra sign-in. Only used when enableEntraAuth is true.')
-param entraClientId string = ''
-@secure()
-@description('Client secret for the Entra sign-in app registration. Only used when enableEntraAuth is true.')
-param entraClientSecret string = ''
-@description('Directory (tenant) ID that issues sign-in tokens. Defaults to the deployment tenant.')
-param entraTenantId string = tenant().tenantId
-
 @allowed([ '17', '16', '15', '14' ])
 @description('PostgreSQL major version. If a region reports the allowed set as empty ([]), it does not offer this version/SKU — choose a supported region or a different SKU.')
 param postgresVersion string = '16'
@@ -167,11 +157,9 @@ var sharedEnv = [
   { name: 'APP_ENV', value: 'production' }
 ]
 
-// When Entra SSO is on, the api app also holds the AAD client secret that Easy
-// Auth references by name (aad-client-secret).
-var apiSecrets = enableEntraAuth
-  ? concat(sharedSecrets, [{ name: 'aad-client-secret', value: entraClientSecret }])
-  : sharedSecrets
+// Entra sign-in is performed by the app itself, using the app registration
+// entered in Settings. There is no platform auth (Easy Auth) to configure here.
+var apiSecrets = sharedSecrets
 
 // --- API (web) container app -------------------------------------------
 resource api 'Microsoft.App/containerApps@2024-03-01' = {
@@ -211,38 +199,6 @@ resource api 'Microsoft.App/containerApps@2024-03-01' = {
     }
   }
   dependsOn: [acrPull]
-}
-
-// --- Entra SSO (Easy Auth) on the api app, when enabled ----------------
-// AllowAnonymous so it only adds identity when present and never blocks the
-// built-in password gate. The app exchanges the injected identity for its own
-// JWT at POST /auth/entra.
-resource apiAuth 'Microsoft.App/containerApps/authConfigs@2024-03-01' = if (enableEntraAuth) {
-  parent: api
-  name: 'current'
-  properties: {
-    platform: { enabled: true }
-    globalValidation: { unauthenticatedClientAction: 'AllowAnonymous' }
-    identityProviders: {
-      azureActiveDirectory: {
-        enabled: true
-        registration: {
-          openIdIssuer: 'https://login.microsoftonline.com/${entraTenantId}/v2.0'
-          clientId: entraClientId
-          clientSecretSettingName: 'aad-client-secret'
-        }
-        validation: {
-          allowedAudiences: [
-            entraClientId
-            'api://${entraClientId}'
-          ]
-        }
-      }
-    }
-    login: {
-      tokenStore: { enabled: true }
-    }
-  }
 }
 
 // --- Worker container app (no ingress) ---------------------------------

@@ -70,40 +70,17 @@
         "description": "Secret used to sign session tokens. Generated automatically."
       }
     },
-    "enableEntraAuth": {
-      "type": "bool",
-      "defaultValue": false,
-      "metadata": {
-        "description": "Enable Entra ID single sign-on (Container Apps Easy Auth) so licensed users can view the dashboard with their work account. Leave off to use only the admin password. When on, provide the Entra app registration client ID and secret below."
-      }
-    },
-    "entraClientId": {
-      "type": "string",
-      "defaultValue": "",
-      "metadata": {
-        "description": "Only used when Entra SSO is enabled. Application (client) ID of the app registration used for sign-in. You can reuse the reporter's own app registration."
-      }
-    },
-    "entraClientSecret": {
-      "type": "securestring",
-      "defaultValue": "",
-      "metadata": {
-        "description": "Only used when Entra SSO is enabled. A client secret for the sign-in app registration."
-      }
-    },
-    "entraTenantId": {
-      "type": "string",
-      "defaultValue": "[subscription().tenantId]",
-      "metadata": {
-        "description": "Only used when Entra SSO is enabled. Directory (tenant) ID that issues sign-in tokens. Defaults to the deployment tenant."
-      }
-    },
     "postgresVersion": {
       "type": "string",
       "defaultValue": "16",
-      "allowedValues": [ "17", "16", "15", "14" ],
+      "allowedValues": [
+        "17",
+        "16",
+        "15",
+        "14"
+      ],
       "metadata": {
-        "description": "PostgreSQL major version. If deployment fails with \"The value of the 'Version' should be in: []\", the target region does not offer this version/SKU combination — deploy to a fully supported region (e.g. australiaeast, eastus, westeurope) or change postgresSkuName/postgresSkuTier."
+        "description": "PostgreSQL major version. If deployment fails with \"The value of the 'Version' should be in: []\", the target region does not offer this version/SKU combination \u2014 deploy to a fully supported region (e.g. australiaeast, eastus, westeurope) or change postgresSkuName/postgresSkuTier."
       }
     },
     "postgresSkuName": {
@@ -116,7 +93,11 @@
     "postgresSkuTier": {
       "type": "string",
       "defaultValue": "Burstable",
-      "allowedValues": [ "Burstable", "GeneralPurpose", "MemoryOptimized" ],
+      "allowedValues": [
+        "Burstable",
+        "GeneralPurpose",
+        "MemoryOptimized"
+      ],
       "metadata": {
         "description": "Compute tier that matches postgresSkuName (Burstable for B-series, GeneralPurpose for D-series, MemoryOptimized for E-series)."
       }
@@ -136,20 +117,50 @@
     "workerImage": "[format('{0}/worker:{1}', parameters('imageRegistry'), parameters('imageTag'))]",
     "databaseUrl": "[format('postgresql+psycopg://{0}:{1}@{2}.postgres.database.azure.com:5432/{3}?sslmode=require', variables('pgAdminLogin'), parameters('postgresAdminPassword'), variables('pgServerName'), variables('pgDatabaseName'))]",
     "sharedSecrets": [
-      { "name": "database-url", "value": "[variables('databaseUrl')]" },
-      { "name": "fernet-key", "value": "[parameters('fernetKey')]" },
-      { "name": "secret-key", "value": "[parameters('secretKey')]" },
-      { "name": "admin-password", "value": "[parameters('adminPassword')]" }
+      {
+        "name": "database-url",
+        "value": "[variables('databaseUrl')]"
+      },
+      {
+        "name": "fernet-key",
+        "value": "[parameters('fernetKey')]"
+      },
+      {
+        "name": "secret-key",
+        "value": "[parameters('secretKey')]"
+      },
+      {
+        "name": "admin-password",
+        "value": "[parameters('adminPassword')]"
+      }
     ],
     "sharedEnv": [
-      { "name": "DATABASE_URL", "secretRef": "database-url" },
-      { "name": "FERNET_KEY", "secretRef": "fernet-key" },
-      { "name": "SECRET_KEY", "secretRef": "secret-key" },
-      { "name": "ADMIN_USERNAME", "value": "[parameters('adminUsername')]" },
-      { "name": "ADMIN_PASSWORD", "secretRef": "admin-password" },
-      { "name": "APP_ENV", "value": "production" }
+      {
+        "name": "DATABASE_URL",
+        "secretRef": "database-url"
+      },
+      {
+        "name": "FERNET_KEY",
+        "secretRef": "fernet-key"
+      },
+      {
+        "name": "SECRET_KEY",
+        "secretRef": "secret-key"
+      },
+      {
+        "name": "ADMIN_USERNAME",
+        "value": "[parameters('adminUsername')]"
+      },
+      {
+        "name": "ADMIN_PASSWORD",
+        "secretRef": "admin-password"
+      },
+      {
+        "name": "APP_ENV",
+        "value": "production"
+      }
     ],
-    "apiSecrets": "[if(parameters('enableEntraAuth'), concat(variables('sharedSecrets'), createArray(createObject('name', 'aad-client-secret', 'value', parameters('entraClientSecret')))), variables('sharedSecrets'))]"
+    "apiSecrets": "[variables('sharedSecrets')]"
   },
   "resources": [
     {
@@ -158,7 +169,9 @@
       "name": "[variables('logsName')]",
       "location": "[parameters('location')]",
       "properties": {
-        "sku": { "name": "PerGB2018" },
+        "sku": {
+          "name": "PerGB2018"
+        },
         "retentionInDays": 30
       }
     },
@@ -176,10 +189,19 @@
         "version": "[parameters('postgresVersion')]",
         "administratorLogin": "[variables('pgAdminLogin')]",
         "administratorLoginPassword": "[parameters('postgresAdminPassword')]",
-        "storage": { "storageSizeGB": 32 },
-        "backup": { "backupRetentionDays": 7, "geoRedundantBackup": "Disabled" },
-        "highAvailability": { "mode": "Disabled" },
-        "network": { "publicNetworkAccess": "Enabled" }
+        "storage": {
+          "storageSizeGB": 32
+        },
+        "backup": {
+          "backupRetentionDays": 7,
+          "geoRedundantBackup": "Disabled"
+        },
+        "highAvailability": {
+          "mode": "Disabled"
+        },
+        "network": {
+          "publicNetworkAccess": "Enabled"
+        }
       },
       "resources": [
         {
@@ -251,43 +273,17 @@
             {
               "name": "api",
               "image": "[variables('apiImage')]",
-              "resources": { "cpu": "[json('0.5')]", "memory": "1Gi" },
+              "resources": {
+                "cpu": "[json('0.5')]",
+                "memory": "1Gi"
+              },
               "env": "[concat(variables('sharedEnv'), createArray(createObject('name', 'RUN_MIGRATIONS_ON_STARTUP', 'value', 'true')))]"
             }
           ],
-          "scale": { "minReplicas": 1, "maxReplicas": 3 }
-        }
-      }
-    },
-    {
-      "condition": "[parameters('enableEntraAuth')]",
-      "type": "Microsoft.App/containerApps/authConfigs",
-      "apiVersion": "2024-03-01",
-      "name": "[format('{0}/current', variables('apiAppName'))]",
-      "dependsOn": [
-        "[resourceId('Microsoft.App/containerApps', variables('apiAppName'))]"
-      ],
-      "properties": {
-        "platform": { "enabled": true },
-        "globalValidation": { "unauthenticatedClientAction": "AllowAnonymous" },
-        "identityProviders": {
-          "azureActiveDirectory": {
-            "enabled": true,
-            "registration": {
-              "openIdIssuer": "[format('https://login.microsoftonline.com/{0}/v2.0', parameters('entraTenantId'))]",
-              "clientId": "[parameters('entraClientId')]",
-              "clientSecretSettingName": "aad-client-secret"
-            },
-            "validation": {
-              "allowedAudiences": [
-                "[parameters('entraClientId')]",
-                "[format('api://{0}', parameters('entraClientId'))]"
-              ]
-            }
+          "scale": {
+            "minReplicas": 1,
+            "maxReplicas": 3
           }
-        },
-        "login": {
-          "tokenStore": { "enabled": true }
         }
       }
     },
@@ -313,11 +309,17 @@
             {
               "name": "worker",
               "image": "[variables('workerImage')]",
-              "resources": { "cpu": "[json('0.5')]", "memory": "1Gi" },
+              "resources": {
+                "cpu": "[json('0.5')]",
+                "memory": "1Gi"
+              },
               "env": "[concat(variables('sharedEnv'), createArray(createObject('name', 'RUN_MIGRATIONS_ON_STARTUP', 'value', 'false')))]"
             }
           ],
-          "scale": { "minReplicas": 1, "maxReplicas": 1 }
+          "scale": {
+            "minReplicas": 1,
+            "maxReplicas": 1
+          }
         }
       }
     }
@@ -330,13 +332,6 @@
     "adminUsername": {
       "type": "string",
       "value": "[parameters('adminUsername')]"
-    },
-    "entraRedirectUriToRegister": {
-      "type": "string",
-      "value": "[if(parameters('enableEntraAuth'), format('https://{0}/.auth/login/aad/callback', reference(resourceId('Microsoft.App/containerApps', variables('apiAppName')), '2024-03-01').configuration.ingress.fqdn), 'Entra SSO disabled')]",
-      "metadata": {
-        "description": "When Entra SSO is enabled, add this URL as a Web redirect URI on your app registration."
-      }
     }
   }
 }

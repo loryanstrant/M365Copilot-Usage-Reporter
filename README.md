@@ -82,29 +82,27 @@ run. Nothing is ever seeded or wiped automatically.
 ### Enabling Entra ID single sign-on (optional)
 
 By default the dashboard is protected by the single admin password. You can additionally let
-colleagues sign in with their **work account** (read-only viewer role) via **Container Apps Easy
-Auth** — administration stays behind the password. You can turn this on **at deploy time or later**.
+colleagues sign in with their **work account** (read-only viewer role) — administration stays
+behind the password.
 
-**One-time prerequisite (either path):** an Entra **app registration** for sign-in (you can reuse
-the reporter's own). Note its **Application (client) ID**, create a **client secret**, and after
-deployment add the redirect URI
-`https://<your-dashboardUrl>/.auth/login/aad/callback` under **Authentication → Web**. If you plan to
-restrict viewers to a security group, also add a **groups** claim under **Token configuration**.
+Sign-in is performed by the app itself, so it works the same wherever you run it: Azure, Docker
+on a NAS, Kubernetes, anywhere. There is nothing to configure on the hosting platform.
 
-**Option A — at deploy time (recommended):** on the **Deploy to Azure** form, open the
-**Authentication** tab and set **Enable Entra ID single sign-on = Yes**, then paste the app
-registration **client ID**, **client secret**, and (optional) **tenant ID**. Everything is wired up
-automatically; grab the **`entraRedirectUriToRegister`** deployment output and add it to the app
-registration as above.
+It reuses the **same app registration** you already entered for collecting data, so there is no
+second set of credentials to manage:
 
-**Option B — after deployment:** open the **`…-api-…`** Container App → **Settings →
-Authentication** → **Add identity provider** → **Microsoft**, use your app registration's client ID
-+ secret, and set *unauthenticated requests* to **Allow** (the app still gates admin behind the
-password; SSO users become viewers). Add the redirect URI as above.
+1. Sign in as the admin and open **Settings**.
+2. Copy the **redirect URI** shown there.
+3. In the Entra portal, open your app registration → **Authentication → Add a platform → Web**,
+   and paste that redirect URI.
+4. Optionally set a **report access group** in Settings to restrict who can view the dashboard. If
+   you do, add a **groups** claim under **Token configuration** on the app registration.
 
-Either way, once enabled the sign-in page shows a **"Sign in with Microsoft"** button and returning
-users are signed in silently. To restrict who may view, set a **report access group** on the
-**Settings** page — only members of that Entra group are admitted.
+The sign-in page then shows a **"Sign in with Microsoft"** button.
+
+> **Behind a reverse proxy?** The app works out its own public address from the request. If your
+> proxy doesn't pass the standard forwarded headers, set `PUBLIC_BASE_URL` (for example
+> `https://reports.contoso.com`) so the redirect URI is correct.
 
 Full details and screenshots: [`docs/deploy.md`](docs/deploy.md#entra-single-sign-on-optional).
 

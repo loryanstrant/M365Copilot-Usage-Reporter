@@ -30,7 +30,7 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
 
   if (resp.status === 401) {
     setToken(null);
-    if (!path.startsWith("/auth/login") && !path.startsWith("/auth/entra")) {
+    if (!path.startsWith("/auth/login") && !path.startsWith("/auth/config")) {
       // Force re-auth on expired/invalid token.
       window.dispatchEvent(new Event("cur:unauthorized"));
     }

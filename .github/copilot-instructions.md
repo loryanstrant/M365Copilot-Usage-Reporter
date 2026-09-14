@@ -61,7 +61,9 @@ Map Graph → project vocabulary at ingest time; the rest of the codebase only k
 
 ## Security & auth
 - MVP: password gate (`app_users`, bcrypt) with roles `admin` / `viewer`. Protect all `/metrics/*` and `/admin/*`.
-- Optional (feature-flagged): Entra ID OIDC; restrict report access to members of
+- Optional: Entra ID sign-in run by the app itself (`api/oidc.py`, OIDC auth-code + PKCE via MSAL),
+  not by the hosting platform, so it works identically on and off Azure. SSO users are viewers, and
+  report access can be restricted to members of
   `app_config.report_access_group_id` (Graph `checkMemberGroups` / `memberOf`).
 - The client secret is **write-only** from the UI, stored Fernet-encrypted, and never returned in a response.
 
