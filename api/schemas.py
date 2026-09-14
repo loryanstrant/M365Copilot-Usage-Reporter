@@ -25,10 +25,9 @@ class UserOut(BaseModel):
     role: str
 
 
-class AuthModeOut(BaseModel):
-    # True when an Entra SSO identity is available (Easy Auth injected a header),
-    # so the SPA can attempt a silent sign-in instead of showing the password form.
-    entra_available: bool = False
+class AuthConfigOut(BaseModel):
+    entra_enabled: bool
+    redirect_uri: str
 
 
 # --- admin config -------------------------------------------------------

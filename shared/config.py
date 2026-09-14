@@ -44,6 +44,10 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     # Directory holding the built frontend bundle (served by the API in prod).
     frontend_dist: str = Field(default="frontend/dist", alias="FRONTEND_DIST")
+    # External origin of this deployment, e.g. https://reports.contoso.com.
+    # Only needed when running behind a proxy that does not set forwarded
+    # headers; it determines the Entra redirect URI. Leave blank to infer.
+    public_base_url: str = Field(default="", alias="PUBLIC_BASE_URL")
 
     # --- Ingest tuning ----------------------------------------------------
     ingest_concurrency: int = Field(default=15, alias="INGEST_CONCURRENCY")

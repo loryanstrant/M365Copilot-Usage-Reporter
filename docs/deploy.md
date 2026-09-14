@@ -129,43 +129,34 @@ The client secret is encrypted at rest with the Fernet key before it touches the
 
 ## Entra single sign-on (optional)
 
-By default the dashboard uses a single admin password. You can additionally let licensed users
-sign in with their **work account** via Azure Container Apps **Easy Auth** — no code or extra
-services, and it's free. Administration stays behind the password; SSO users get a read-only
-**viewer** role.
+The dashboard is protected by the admin password by default. Entra sign-in adds read-only viewer
+access with work accounts, while administration stays behind the password.
 
-**Enable it at deploy time (portal button):** on the **Deploy to Azure** form there is an
-**Authentication** tab. Set **Enable Entra ID single sign-on = Yes** and fill in the app
-registration **client ID**, **client secret**, and (optional) **tenant ID**. These map to the
-template parameters below (which you can also set directly when deploying the template by hand or via
-`azd`, all default off/empty):
+Sign-in is performed by the app itself rather than by the hosting platform, so it behaves the same
+on Azure Container Apps, Docker on any host, or Kubernetes. Nothing needs configuring on the
+platform, and there is no deploy-time setting for it.
 
-| Parameter | Value |
-| --- | --- |
-| `enableEntraAuth` | `true` |
-| `entraClientId` | Application (client) ID of the sign-in app registration (you can reuse the reporter's own) |
-| `entraClientSecret` | A client secret for that app registration |
-| `entraTenantId` | Defaults to the deployment tenant |
+**Prerequisite:** none beyond the app registration you already created for collecting data — the
+same one is reused for sign-in.
 
-**Two one-time steps on the app registration** (Easy Auth is the relying party):
+**Setup, after deployment:**
 
-1. **Redirect URI** — after the deploy finishes, copy the deployment output
-   `entraRedirectUriToRegister` (looks like `https://<app>.azurecontainerapps.io/.auth/login/aad/callback`)
-   and add it under the app registration's **Authentication → Web → Redirect URIs**.
-2. **Group claim (recommended if you set a report-access group)** — under **Token configuration →
-   Add groups claim**, include **Security groups**. This lets the group gate work straight from the
-   token. Without it, the reporter falls back to an app-only Graph `checkMemberGroups` call using the
-   permissions it already has.
+1. Sign in as the admin and open **Settings**.
+2. Copy the **redirect URI** shown there (it is
+   `https://<your-dashboardUrl>/auth/oidc/callback`).
+3. In the Entra portal, open the app registration → **Authentication → Add a platform → Web** and
+   paste that redirect URI.
+4. To restrict viewers to a security group, set the **report access group** in **Settings** and add
+   a **groups** claim under **Token configuration** on the app registration. Without the claim the
+   reporter falls back to an app-only Graph `checkMemberGroups` call using the permissions it
+   already has. Non-members are refused (fail-closed).
 
-Once enabled, the sign-in page shows a **"Sign in with Microsoft"** button, and returning users are
-signed in silently. If the configured **report access group** is set, only its members are admitted;
-everyone else is refused (fail-closed).
+Once the app registration details are saved, the sign-in page shows a **Sign in with Microsoft**
+button.
 
-To enable it on an **already-deployed** instance without redeploying, add the authentication config
-to the api container app in the portal: open the **`…-api-…`** Container App → **Settings →
-Authentication → Add identity provider → Microsoft**, use the app registration's client ID + secret,
-and set unauthenticated access to **Allow**. (Redeploying the template with the parameters above
-works too.)
+**Behind a reverse proxy:** the app derives its public address from the request, honouring
+`X-Forwarded-Proto` / `X-Forwarded-Host`. If your proxy does not send those, set `PUBLIC_BASE_URL`
+(for example `https://reports.contoso.com`) so the redirect URI matches what you registered.
 
 ---
 

@@ -15,6 +15,7 @@ export interface User {
 interface AuthContextValue {
   user: User | null;
   loading: boolean;
+  ssoError: string | null;
   login: (username: string, password: string) => Promise<void>;
   logout: () => void;
 }
@@ -22,6 +23,7 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue>({
   user: null,
   loading: true,
+  ssoError: null,
   login: async () => {},
   logout: () => {},
 });
@@ -29,30 +31,29 @@ const AuthContext = createContext<AuthContextValue>({
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [ssoError, setSsoError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
     (async () => {
+      // A completed Entra sign-in hands the token back in the URL fragment.
+      // Fragments never reach the server, so the token cannot appear in access
+      // logs or a Referer header. Consume it and strip it from the address bar.
+      const hash = window.location.hash;
+      if (hash.startsWith("#sso=")) {
+        setToken(decodeURIComponent(hash.slice("#sso=".length)));
+        window.history.replaceState(null, "", window.location.pathname);
+      } else if (hash.startsWith("#sso_error=")) {
+        if (active) setSsoError(decodeURIComponent(hash.slice("#sso_error=".length)));
+        window.history.replaceState(null, "", window.location.pathname);
+      }
+
       if (getToken()) {
         try {
           const me = await api<User>("/auth/me");
           if (active) setUser(me);
         } catch {
           setToken(null);
-        }
-      } else {
-        // No app token yet: try a silent Entra SSO exchange. Succeeds only when
-        // Azure Easy Auth has injected an identity (i.e. the user already signed
-        // in via their organisation); otherwise we fall through to the login page.
-        try {
-          const res = await api<{ access_token: string; username: string; role: string }>(
-            "/auth/entra",
-            { method: "POST" },
-          );
-          setToken(res.access_token);
-          if (active) setUser({ username: res.username, role: res.role });
-        } catch {
-          /* no SSO identity — show the sign-in page */
         }
       }
       if (active) setLoading(false);
@@ -81,7 +82,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, ssoError, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

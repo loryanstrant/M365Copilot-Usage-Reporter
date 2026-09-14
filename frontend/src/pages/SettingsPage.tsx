@@ -50,6 +50,7 @@ export default function SettingsPage() {
   const [skuIds, setSkuIds] = useState(DEFAULT_SKU);
   const [scheduleHours, setScheduleHours] = useState(24);
   const [groupId, setGroupId] = useState("");
+  const [redirectUri, setRedirectUri] = useState("");
 
   function applyConfig(cfg: AppConfig) {
     setTenantId(cfg.tenant_id ?? "");
@@ -73,6 +74,12 @@ export default function SettingsPage() {
       try {
         applyConfig(await api<AppConfig>("/admin/config"));
         await refreshStatus();
+        try {
+          const auth = await api<{ redirect_uri: string }>("/auth/config");
+          setRedirectUri(auth.redirect_uri);
+        } catch {
+          /* non-fatal: the sign-in card just won't show a URI to copy */
+        }
       } catch (err) {
         setBanner({
           kind: "error",
@@ -248,6 +255,25 @@ export default function SettingsPage() {
                 </option>
               ))}
             </select>
+          </Field>
+
+          <div className="border-t border-slate-200 pt-5 dark:border-slate-700">
+            <h2 className="text-lg font-semibold">Sign in with Microsoft (optional)</h2>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+              Lets colleagues sign in with their work account as read-only viewers. It
+              reuses the app registration above, so there is nothing extra to create —
+              you only need to register the redirect URI below. Administration stays
+              behind the admin password.
+            </p>
+          </div>
+
+          <Field label="Redirect URI — add this to your app registration under Authentication → Web">
+            <input
+              value={redirectUri}
+              readOnly
+              onFocus={(e) => e.currentTarget.select()}
+              className="input font-mono text-xs"
+            />
           </Field>
 
           <Field

@@ -1,25 +1,25 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useAuth } from "../auth/AuthContext";
-import { ApiError } from "../api/client";
+import { ApiError, api } from "../api/client";
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, ssoError } = useAuth();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [entraEnabled, setEntraEnabled] = useState(false);
 
-  // Show the Microsoft sign-in button only when Azure Easy Auth is configured
-  // (the platform /.auth/me endpoint responds). In local/dev it 404s and the
-  // button stays hidden.
+  // Show the Microsoft sign-in button only once an Entra app registration has
+  // been saved in Settings. This works on any host — it asks our own API, not
+  // an Azure-specific platform endpoint.
   useEffect(() => {
     (async () => {
       try {
-        const resp = await fetch("/.auth/me", { headers: { Accept: "application/json" } });
-        if (resp.ok) setEntraEnabled(true);
+        const cfg = await api<{ entra_enabled: boolean }>("/auth/config");
+        setEntraEnabled(cfg.entra_enabled);
       } catch {
-        /* not on Azure / Easy Auth off */
+        /* API unreachable — leave the button hidden */
       }
     })();
   }, []);
@@ -91,10 +91,19 @@ export default function LoginPage() {
             Sign in to continue.
           </p>
 
+          {ssoError && (
+            <div
+              role="alert"
+              className="mb-5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-700/60 dark:bg-amber-900/30 dark:text-amber-200"
+            >
+              {ssoError}
+            </div>
+          )}
+
           {entraEnabled && (
             <>
               <a
-                href="/.auth/login/aad?post_login_redirect_uri=%2F"
+                href="/auth/oidc/start"
                 className="btn-primary flex w-full items-center justify-center gap-2"
               >
                 Sign in with Microsoft
