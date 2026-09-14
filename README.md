@@ -196,14 +196,45 @@ Copy-Item .env.example .env
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 # paste the printed value into FERNET_KEY in .env
 
-# 2. Start the full stack (api + worker + postgres + frontend)
-docker compose up --build
+# 2. Start the production stack (api + worker + postgres)
+docker compose up -d
 ```
 
-- **Dashboard (web UI):** http://localhost:5173
+- **Dashboard + API:** http://localhost:8000
 - **API + Swagger docs:** http://localhost:8000/docs
 - **API health check:** http://localhost:8000/health
 - **Postgres:** localhost:5432 (user/pass/db all `copilot` by default)
+
+This is the production stack: it runs prebuilt images with no bind mounts and no
+auto-reload, and the API serves the built dashboard itself — so there is no separate
+frontend container or web port. `docker compose up` pulls the published images; add
+`--build` to build them locally instead.
+
+Every solution in the suite owns a distinct port block, so all four can run side by
+side without clashing:
+
+| Solution | API / dashboard | Postgres |
+|---|---|---|
+| **M365 Copilot Usage Reporter** | **8000** | **5432** |
+| M365 Copilot Cowork Reporter | 8001 | 5433 |
+| Copilot Studio Agent Quality Reporter | 8002 | 5434 |
+| M365 Copilot Prompt Analyser | 8003 | 5435 |
+
+Override `API_PORT` / `DB_PORT` in `.env` to move them. Only the host side changes —
+container-internal wiring is unaffected.
+
+### Developing against it
+
+For hot-reload while working on the code, layer the dev override on top. It builds
+locally, bind-mounts the source, enables `uvicorn --reload` and runs the Vite dev
+server:
+
+```powershell
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+```
+
+The dev dashboard is then on http://localhost:5173 (`WEB_PORT`), with the API still
+on 8000.
 
 On first start an admin login is seeded from `ADMIN_USERNAME` / `ADMIN_PASSWORD` in `.env`
 (defaults `admin` / `change-me` — change these).
