@@ -46,6 +46,8 @@ export default function LocationsPage() {
     })();
   }, [filterDeps(filters)]);
 
+  // ECharts by exception: a two-level sunburst (app → chat type) has no
+  // Recharts equivalent. Every other chart in this app uses Recharts.
   // Build a two-level sunburst: app → chat type.
   const sunOption = useMemo(() => {
     const byApp = new Map<string, { name: string; value: number }[]>();

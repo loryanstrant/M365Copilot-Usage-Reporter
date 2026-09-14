@@ -85,14 +85,19 @@ function trendline(values: number[]): number[] {
   return xs.map((x) => Math.max(0, intercept + slope * x));
 }
 
+export type AppSort = "usage" | "name";
+
 export default function AppTrendGrid({
   rows,
   metric,
-  maxApps = 15,
+  maxApps = 18,
+  sortBy = "usage",
 }: {
   rows: AppDailyPoint[];
   metric: Metric;
   maxApps?: number;
+  /** "usage" ranks by the selected measure (busiest first); "name" is A→Z. */
+  sortBy?: AppSort;
 }) {
   const panels = useMemo<AppPanel[]>(() => {
     if (rows.length === 0) return [];
@@ -126,9 +131,16 @@ export default function AppTrendGrid({
       const total = metricVals.reduce((a, b) => a + b, 0);
       result.push({ app, total, data });
     }
+    // Always pick the busiest `maxApps` surfaces, then order that same set for
+    // display — so toggling the sort re-orders the panels rather than swapping
+    // which apps are shown.
     result.sort((a, b) => b.total - a.total);
-    return result.slice(0, maxApps);
-  }, [rows, metric, maxApps]);
+    const shown = result.slice(0, maxApps);
+    if (sortBy === "name") {
+      shown.sort((a, b) => a.app.localeCompare(b.app, undefined, { sensitivity: "base" }));
+    }
+    return shown;
+  }, [rows, metric, maxApps, sortBy]);
 
   if (panels.length === 0) {
     return <div className="py-16 text-center text-sm text-slate-400">No data.</div>;

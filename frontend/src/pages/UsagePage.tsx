@@ -1,8 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import type * as echarts from "echarts";
 import {
   Bar,
   BarChart,
+  Legend,
+  PolarAngleAxis,
+  PolarGrid,
+  PolarRadiusAxis,
+  Radar,
+  RadarChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -21,10 +26,10 @@ import ChartCard from "../components/ChartCard";
 import ChartTooltip from "../components/ChartTooltip";
 import { barGradId } from "../components/chartTheme";
 import AppLabel from "../components/AppLabel";
-import AppTrendGrid from "../components/AppTrendGrid";
+import AppTrendGrid, { type AppSort } from "../components/AppTrendGrid";
 import DataTable, { type Column } from "../components/DataTable";
-import EChart from "../components/EChart";
 import FilterBar from "../components/FilterBar";
+import SegmentedControl from "../components/SegmentedControl";
 import { filterDeps, metricLabel, metricsQuery, useFilters } from "../filters/FiltersContext";
 import { useTheme } from "../theme/ThemeContext";
 
@@ -57,6 +62,7 @@ export default function UsagePage() {
   const [categories, setCategories] = useState<CategoryRow[]>([]);
   const [radar, setRadar] = useState<BreakdownRow[]>([]);
   const [appDaily, setAppDaily] = useState<AppDailyPoint[]>([]);
+  const [appSort, setAppSort] = useState<AppSort>("usage");
 
   useEffect(() => {
     (async () => {
@@ -84,42 +90,26 @@ export default function UsagePage() {
 
   const shownApps = apps;
 
-  // Radar: usage profile of the top apps across departments.
-  const radarOption = useMemo(() => {
-    const nameColor = theme === "dark" ? "#cbd5e1" : "#475569";
-    const gridColor = theme === "dark" ? "rgba(148,163,184,0.25)" : "rgba(100,116,139,0.25)";
+  // Radar: usage profile of the top apps across departments. Recharts needs one
+  // row per axis (app) with a series key per department, rather than ECharts'
+  // indicator/value-array shape.
+  const { radarData, radarDepts } = useMemo(() => {
     const apps = [...new Set(radar.map((r) => r.d2 ?? "Unknown"))].slice(0, 6);
     const depts = [...new Set(radar.map((r) => r.d1 ?? "Unknown"))].slice(0, 5);
     const lookup = new Map(radar.map((r) => [`${r.d1}|${r.d2}`, r[metric]]));
-    const maxByApp = apps.map((app) =>
-      Math.max(1, ...depts.map((d) => lookup.get(`${d}|${app}`) ?? 0)),
-    );
-    return {
-      tooltip: {},
-      legend: { bottom: 0, textStyle: { fontSize: 11, color: nameColor } },
-      radar: {
-        indicator: apps.map((app, i) => ({ name: app, max: maxByApp[i] })),
-        radius: "62%",
-        axisName: { color: nameColor, fontSize: 11 },
-        splitLine: { lineStyle: { color: gridColor } },
-        axisLine: { lineStyle: { color: gridColor } },
-        splitArea: { areaStyle: { opacity: theme === "dark" ? 0.03 : 0.05 } },
-      },
-      series: [
-        {
-          type: "radar",
-          data: depts.map((d, i) => ({
-            name: d,
-            value: apps.map((app) => lookup.get(`${d}|${app}`) ?? 0),
-            symbolSize: 4,
-            lineStyle: { width: 2, color: RADAR_COLORS[i % RADAR_COLORS.length] },
-            areaStyle: { opacity: 0.12, color: RADAR_COLORS[i % RADAR_COLORS.length] },
-            itemStyle: { color: RADAR_COLORS[i % RADAR_COLORS.length] },
-          })),
-        },
-      ],
-    } as echarts.EChartsOption;
-  }, [radar, theme, metric]);
+    const data = apps.map((app) => {
+      const row: Record<string, string | number> = { app };
+      depts.forEach((d) => {
+        row[d] = lookup.get(`${d}|${app}`) ?? 0;
+      });
+      return row;
+    });
+    return { radarData: data, radarDepts: depts };
+  }, [radar, metric]);
+
+  const radarAxisColor = theme === "dark" ? "#cbd5e1" : "#475569";
+  const radarGridColor =
+    theme === "dark" ? "rgba(148,163,184,0.25)" : "rgba(100,116,139,0.25)";
 
   function exportApps() {
     downloadCsv(
@@ -165,8 +155,19 @@ export default function UsagePage() {
       <ChartCard
         title="Conversations & prompts by app"
         subtitle={`Monthly trend per app · ${metricLabel(metric).toLowerCase()} trendline`}
+        action={
+          <SegmentedControl
+            ariaLabel="Sort app charts"
+            value={appSort}
+            onChange={setAppSort}
+            options={[
+              { value: "usage", label: `By ${metricLabel(metric).toLowerCase()}` },
+              { value: "name", label: "By app" },
+            ]}
+          />
+        }
       >
-        <AppTrendGrid rows={appDaily} metric={metric} />
+        <AppTrendGrid rows={appDaily} metric={metric} sortBy={appSort} />
       </ChartCard>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -188,7 +189,29 @@ export default function UsagePage() {
           {radar.length === 0 ? (
             <div className="py-16 text-center text-sm text-slate-400">No data.</div>
           ) : (
-            <EChart option={radarOption} height={260} />
+            <ResponsiveContainer width="100%" height={260}>
+              <RadarChart data={radarData} outerRadius="68%">
+                <PolarGrid stroke={radarGridColor} />
+                <PolarAngleAxis
+                  dataKey="app"
+                  tick={{ fontSize: 11, fill: radarAxisColor }}
+                />
+                <PolarRadiusAxis tick={{ fontSize: 10, fill: radarAxisColor }} />
+                <Tooltip content={<ChartTooltip />} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                {radarDepts.map((d, i) => (
+                  <Radar
+                    key={d}
+                    name={d}
+                    dataKey={d}
+                    stroke={RADAR_COLORS[i % RADAR_COLORS.length]}
+                    fill={RADAR_COLORS[i % RADAR_COLORS.length]}
+                    fillOpacity={0.12}
+                    strokeWidth={2}
+                  />
+                ))}
+              </RadarChart>
+            </ResponsiveContainer>
           )}
         </ChartCard>
       </div>

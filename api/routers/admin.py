@@ -269,6 +269,43 @@ async def backfill_coverage(session: AsyncSession = Depends(get_session)) -> dic
     }
 
 
+@router.post("/seed-demo", response_model=IngestRunOut)
+async def seed_demo(days: int = 45, users: int = 40, reset: bool = True) -> IngestRunOut:
+    """Seed synthetic usage data so the dashboards render without live Graph.
+
+    Explicit action only — nothing is ever seeded automatically on deploy.
+    Credentials and app user accounts are never touched.
+    """
+    from scripts.seed_demo import seed
+
+    days = max(1, min(days, 365))
+    users = max(1, min(users, 500))
+    stats = await seed(days=days, users=users, reset=reset)
+    return IngestRunOut(
+        status="seeded",
+        detail=(
+            f"Seeded {stats['prompts']} prompts across {stats['conversations']} "
+            f"conversations for {stats['licensed_users']} licensed users."
+        ),
+    )
+
+
+@router.post("/clear-demo", response_model=IngestRunOut)
+async def clear_demo() -> IngestRunOut:
+    """Remove all seeded data, leaving credentials and accounts intact.
+
+    Run this before your first production run so demo numbers can't be mistaken
+    for real ones.
+    """
+    from scripts.seed_demo import clear
+
+    await clear()
+    return IngestRunOut(
+        status="cleared",
+        detail="Demo data removed. Run now to load live data from Microsoft Graph.",
+    )
+
+
 @router.get("/status", response_model=StatusOut)
 async def status(session: AsyncSession = Depends(get_session)) -> StatusOut:
     cfg = await _get_config(session)
