@@ -71,12 +71,25 @@ class AppConfigOut(BaseModel):
     updated_by: str | None = None
 
 
+class CopilotSkuOut(BaseModel):
+    """A tenant subscription, and whether it grants Copilot."""
+
+    sku_id: str
+    name: str
+    grants_copilot: bool
+    seats: int = 0
+    assigned: int = 0
+
+
 class TestConnectionOut(BaseModel):
     ok: bool
     token_acquired: bool = False
     subscribed_skus: bool = False
     directory_read: bool = False
     copilot_licensed_users: int | None = None
+    # Every subscription found, counted ones first. Drives the Settings panel
+    # that shows which SKUs grant Copilot.
+    copilot_skus: list[CopilotSkuOut] = []
     detail: str | None = None
 
 

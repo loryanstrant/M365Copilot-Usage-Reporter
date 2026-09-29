@@ -16,10 +16,20 @@ export interface AppConfig {
   updated_by: string | null;
 }
 
+/** A tenant subscription, and whether it grants Copilot. */
+export interface CopilotSku {
+  sku_id: string;
+  name: string;
+  grants_copilot: boolean;
+  seats: number;
+  assigned: number;
+}
+
 export interface TestConnectionResult {
   ok: boolean;
   token_acquired: boolean;
   subscribed_skus: boolean;
+  copilot_skus?: CopilotSku[];
   directory_read: boolean;
   copilot_licensed_users: number | null;
   detail: string | null;

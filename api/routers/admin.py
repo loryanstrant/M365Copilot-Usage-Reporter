@@ -45,7 +45,9 @@ logger = logging.getLogger("api.admin")
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin)])
 
-_DEFAULT_SKUS = ["639dec6b-bb19-468b-871c-c5c441c4b0cb"]
+# Empty means "detect from the tenant's subscriptions" — see
+# worker.licensing. A populated list is a deliberate administrator override.
+_DEFAULT_SKUS: list[str] = []
 _ingest_lock = asyncio.Lock()
 _user_sync_lock = asyncio.Lock()
 

@@ -126,9 +126,10 @@ class AppConfig(Base):
     tenant_id: Mapped[str | None] = mapped_column(Text)
     client_id: Mapped[str | None] = mapped_column(Text)
     client_secret_encrypted: Mapped[str | None] = mapped_column(Text)
-    copilot_sku_ids: Mapped[list[str]] = mapped_column(
-        StrArray, default=["639dec6b-bb19-468b-871c-c5c441c4b0cb"]
-    )
+    # Manual override for Copilot licence detection. Empty means "detect",
+    # which asks the tenant which SKUs carry the Graph-grounded chat service
+    # plan (see worker.licensing) and is right for almost every tenant.
+    copilot_sku_ids: Mapped[list[str]] = mapped_column(StrArray, default=list)
     report_access_group_id: Mapped[str | None] = mapped_column(Text)
     # Membership of this group unlocks the organisation-wide view. Blank means
     # the org view is open to everyone who can sign in, which is how the app

@@ -10,7 +10,6 @@ import type {
   TestConnectionResult,
 } from "../api/types";
 
-const DEFAULT_SKU = "639dec6b-bb19-468b-871c-c5c441c4b0cb";
 
 // Friendly cadence presets → hours. Never less often than daily (24h).
 const SCHEDULE_OPTIONS = [
@@ -47,7 +46,7 @@ export default function SettingsPage() {
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [hasSecret, setHasSecret] = useState(false);
-  const [skuIds, setSkuIds] = useState(DEFAULT_SKU);
+  const [skuIds, setSkuIds] = useState("");
   const [scheduleHours, setScheduleHours] = useState(24);
   const [groupId, setGroupId] = useState("");
   const [orgGroupId, setOrgGroupId] = useState("");
@@ -58,7 +57,7 @@ export default function SettingsPage() {
     setTenantId(cfg.tenant_id ?? "");
     setClientId(cfg.client_id ?? "");
     setHasSecret(cfg.has_client_secret);
-    setSkuIds((cfg.copilot_sku_ids ?? []).join(", ") || DEFAULT_SKU);
+    setSkuIds((cfg.copilot_sku_ids ?? []).join(", "));
     setScheduleHours(cfg.schedule_interval_hours ?? 24);
     setGroupId(cfg.report_access_group_id ?? "");
     setOrgGroupId(cfg.org_view_group_id ?? "");
@@ -251,16 +250,25 @@ export default function SettingsPage() {
             />
           </Field>
 
-          <Field
-            label="Copilot SKU IDs"
-            hint="Comma-separated. Defaults to the Microsoft 365 Copilot SKU."
-          >
+          <details className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+            <summary className="cursor-pointer text-sm font-medium text-slate-700 dark:text-slate-300">
+              Override which licences count
+            </summary>
+            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+              Normally you don't need this. Copilot licences are detected from
+              your tenant's own subscriptions — anything that includes
+              "Microsoft Copilot with Graph-grounded chat" counts, which covers
+              Microsoft 365 Copilot, Microsoft 365 E7, Copilot for Sales and any
+              new Copilot subscription without a change here. Enter SKU IDs only
+              if you need to force the answer.
+            </p>
             <input
               value={skuIds}
               onChange={(e) => setSkuIds(e.target.value)}
-              className="input"
+              placeholder="Leave blank to detect automatically"
+              className="input mt-2"
             />
-          </Field>
+          </details>
 
           <Field
             label="Refresh frequency"
@@ -359,6 +367,42 @@ export default function SettingsPage() {
                 <CheckRow ok={test.subscribed_skus} label="Read subscribed SKUs" />
                 <CheckRow ok={test.directory_read} label="Directory read" />
               </ul>
+              {test.copilot_skus && test.copilot_skus.length > 0 && (
+                <div className="mt-4">
+                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Subscriptions found
+                  </h4>
+                  <ul className="space-y-1.5 text-sm">
+                    {test.copilot_skus.map((sku) => (
+                      <li
+                        key={sku.sku_id}
+                        className={`flex items-start justify-between gap-3 rounded-lg border px-3 py-2 ${
+                          sku.grants_copilot
+                            ? "border-slate-200 dark:border-slate-700"
+                            : "border-slate-200 opacity-60 dark:border-slate-700"
+                        }`}
+                      >
+                        <span className="min-w-0">
+                          <span className="mr-2" aria-hidden>
+                            {sku.grants_copilot ? "●" : "○"}
+                          </span>
+                          <span className="text-slate-700 dark:text-slate-200">
+                            {sku.name}
+                          </span>
+                          <span className="ml-6 block text-xs text-slate-400 dark:text-slate-500">
+                            {sku.grants_copilot
+                              ? "Includes Copilot"
+                              : "Does not include Copilot"}
+                          </span>
+                        </span>
+                        <span className="shrink-0 text-xs tabular-nums text-slate-400 dark:text-slate-500">
+                          {sku.grants_copilot ? `${sku.seats} seats` : "not counted"}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               {test.copilot_licensed_users != null && (
                 <div className="mt-3 text-sm text-slate-600 dark:text-slate-300">
                   Copilot-licensed users:{" "}
