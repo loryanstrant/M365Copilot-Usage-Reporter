@@ -7,7 +7,10 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",
     "uvicorn[standard]>=0.30",
-    "sqlalchemy>=2.0",
+    # The asyncio extra, not bare sqlalchemy: it pulls greenlet, without
+    # which SQLAlchemy's async engine refuses to import and the app cannot
+    # start at all.
+    "sqlalchemy[asyncio]>=2.0",
     "alembic>=1.13",
     "httpx>=0.27",
     "msal>=1.30",

@@ -150,6 +150,16 @@ def _make_users(rng: random.Random, count: int) -> list[EntraUser]:
                 has_copilot_license=licensed,
             )
         )
+    # Give each department a manager drawn from its own people, so the manager
+    # column and the manager slicer have something to show. Without this every
+    # row reads "—" and the feature looks broken rather than unpopulated.
+    by_dept: dict[str, list[EntraUser]] = {}
+    for u in users:
+        by_dept.setdefault(u.department or "", []).append(u)
+    for members in by_dept.values():
+        lead = members[0]
+        for u in members[1:]:
+            u.manager_id = lead.user_id
     return users
 
 
