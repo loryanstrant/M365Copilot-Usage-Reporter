@@ -23,6 +23,9 @@ class TokenOut(BaseModel):
 class UserOut(BaseModel):
     username: str
     role: str
+    # Entra's display name. None for the password admin and for tokens issued
+    # before display names were carried, so the UI falls back to the username.
+    display_name: str | None = None
     # Whether this user may see organisation-wide data. Drives whether the SPA
     # offers the org view or shows it locked.
     can_view_org: bool = True
@@ -45,6 +48,7 @@ class AppConfigIn(BaseModel):
     copilot_sku_ids: list[str] | None = None
     report_access_group_id: str | None = None
     org_view_group_id: str | None = None
+    admin_group_id: str | None = None
     backfill_days: int | None = Field(default=None, ge=1, le=3650)
     schedule_cron: str | None = None
     # Friendly recurring-ingest cadence: run every N hours (1..24; 24 = daily).
@@ -58,6 +62,7 @@ class AppConfigOut(BaseModel):
     copilot_sku_ids: list[str] = []
     report_access_group_id: str | None = None
     org_view_group_id: str | None = None
+    admin_group_id: str | None = None
     backfill_days: int = 30
     schedule_cron: str | None = None
     schedule_interval_hours: int = 24

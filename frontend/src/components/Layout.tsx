@@ -100,10 +100,21 @@ export default function Layout({ children }: { children: ReactNode }) {
             <span aria-hidden>{theme === "dark" ? "🌙" : "☀️"}</span>
           </button>
           <div>
-            <div className="font-medium text-slate-800 dark:text-slate-100">
-              {user?.username}
+            <div
+              className="truncate font-medium text-slate-800 dark:text-slate-100"
+              title={user?.display_name ?? user?.username}
+            >
+              {user?.display_name ?? user?.username}
             </div>
-            <div className="mb-3 text-xs uppercase tracking-wide text-slate-400">
+            {user?.display_name && (
+              <div
+                className="truncate text-xs text-slate-400 dark:text-slate-500"
+                title={user.username}
+              >
+                {user.username}
+              </div>
+            )}
+            <div className="mb-3 mt-1 text-xs uppercase tracking-wide text-slate-400">
               {user?.role}
             </div>
             <button
