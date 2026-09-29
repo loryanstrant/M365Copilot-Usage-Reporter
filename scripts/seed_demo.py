@@ -26,8 +26,10 @@ from sqlalchemy import delete
 
 from shared.db import SessionLocal
 from shared.migrate import upgrade_to_head
+from shared.demo import DEMO_PERSONA_KEY
 from shared.models import (
     EntraUser,
+    IngestState,
     LicenseCount,
     LicensedUser,
     Prompt,
@@ -286,6 +288,33 @@ async def seed(days: int = 45, users: int = 90, reset: bool = True) -> dict[str,
         )
         session.add_all(licence_counts)
         session.add_all(prompts)
+
+        # Record one seeded person as "the demo persona". Signing in with the
+        # local admin password gives you no directory identity, so the personal
+        # pages this app advertises were unreachable when evaluating with demo
+        # data — you could read about them but never see them. The login route
+        # binds the password admin to this person while demo data is loaded,
+        # and clear() removes the binding along with the data.
+        # The busiest licensed person is chosen so the personal view has
+        # something worth looking at.
+        busiest = max(
+            licensed,
+            key=lambda u: sum(1 for pr in prompts if pr.user_id == u.user_id),
+            default=None,
+        )
+        if busiest is not None:
+            await session.merge(
+                IngestState(
+                    key=DEMO_PERSONA_KEY,
+                    last_status="seeded",
+                    last_run_at=now,
+                    detail={
+                        "user_id": busiest.user_id,
+                        "upn": busiest.upn,
+                        "display_name": busiest.display_name,
+                    },
+                )
+            )
         await session.commit()
 
     return {
@@ -300,6 +329,11 @@ async def seed(days: int = 45, users: int = 90, reset: bool = True) -> dict[str,
 async def clear() -> dict[str, int]:
     """Remove all seeded usage data, leaving credentials and accounts intact."""
     async with SessionLocal() as session:
+        # Drop the demo persona binding with the data it pointed at, so the
+        # password admin stops borrowing an identity that no longer exists.
+        await session.execute(
+            delete(IngestState).where(IngestState.key == DEMO_PERSONA_KEY)
+        )
         await session.execute(delete(Prompt))
         await session.execute(delete(LicensedUser))
         await session.execute(delete(LicenseCount))

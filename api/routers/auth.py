@@ -33,6 +33,7 @@ from api.oidc import (
 )
 from api.schemas import AuthConfigOut, LoginIn, TokenOut, UserOut
 from shared.db import get_session
+from shared.demo import demo_persona
 from shared.models import AppConfig
 
 logger = logging.getLogger("api.auth")
@@ -58,7 +59,18 @@ async def login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
         )
-    token = create_access_token(user.username, user.role)
+    # With demo data loaded, the password admin borrows a seeded identity so
+    # the personal view — which is derived from the token's object ID — is
+    # reachable without Entra. No demo data, no binding, so a live deployment
+    # is unaffected.
+    persona = await demo_persona(session)
+    token = create_access_token(
+        user.username,
+        user.role,
+        oid=persona["user_id"] if persona else None,
+        upn=persona["upn"] if persona else None,
+        display_name=persona["display_name"] if persona else None,
+    )
     return TokenOut(access_token=token, username=user.username, role=user.role)
 
 
