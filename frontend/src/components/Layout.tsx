@@ -119,18 +119,25 @@ export default function Layout({ children }: { children: ReactNode }) {
           <div>
             <div
               className="truncate font-medium text-slate-800 dark:text-slate-100"
-              title={user?.display_name ?? user?.username}
+              title={user?.display_name ?? user?.upn ?? user?.username}
             >
-              {user?.display_name ?? user?.username}
+              {user?.display_name ?? user?.upn ?? user?.username}
             </div>
-            {user?.display_name && (
-              <div
-                className="truncate text-xs text-slate-400 dark:text-slate-500"
-                title={user.username}
-              >
-                {user.username}
-              </div>
-            )}
+            {/* The identifier beneath the name. Prefer the UPN — the account
+                name is "admin" for the password gate, which says nothing about
+                who is on screen. Hidden when it would just repeat the name. */}
+            {(() => {
+              const name = user?.display_name ?? user?.upn ?? user?.username;
+              const identifier = user?.upn ?? user?.username;
+              return identifier && identifier !== name ? (
+                <div
+                  className="truncate text-xs text-slate-400 dark:text-slate-500"
+                  title={identifier}
+                >
+                  {identifier}
+                </div>
+              ) : null;
+            })()}
             <div className="mb-3 mt-1 text-xs uppercase tracking-wide text-slate-400">
               {user?.role}
             </div>

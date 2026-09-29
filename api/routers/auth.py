@@ -175,6 +175,7 @@ async def me(
         username=user.username,
         role=await effective_role(user, session),
         display_name=user.display_name,
+        upn=user.upn,
         can_view_org=await can_view_org(user, session),
         has_personal_view=user.has_personal_view,
     )

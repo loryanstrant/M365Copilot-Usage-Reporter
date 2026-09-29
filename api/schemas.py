@@ -26,6 +26,10 @@ class UserOut(BaseModel):
     # Entra's display name. None for the password admin and for tokens issued
     # before display names were carried, so the UI falls back to the username.
     display_name: str | None = None
+    # The signed-in person's UPN. Usually the same as username for an Entra
+    # sign-in, but not when the password admin is borrowing a demo identity —
+    # there the account is "admin" and the person on screen is someone else.
+    upn: str | None = None
     # Whether this user may see organisation-wide data. Drives whether the SPA
     # offers the org view or shows it locked.
     can_view_org: bool = True

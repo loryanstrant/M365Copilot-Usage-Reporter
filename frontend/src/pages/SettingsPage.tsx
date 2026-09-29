@@ -293,7 +293,7 @@ export default function SettingsPage() {
               Lets colleagues sign in with their work account as read-only viewers. It
               reuses the app registration above, so there is nothing extra to create —
               you only need to register the redirect URI below. Administration stays
-              behind the admin password.
+              behind the admin password unless you name an admin group below.
             </p>
           </div>
 

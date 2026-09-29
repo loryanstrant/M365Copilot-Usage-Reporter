@@ -75,6 +75,7 @@ async def test_admin_config_roundtrip_secret_write_only(session):
             "role": "admin",
             # The password admin has no directory identity, so no display name.
             "display_name": None,
+            "upn": None,
             "can_view_org": True,
             "has_personal_view": False,
         }
