@@ -2,7 +2,8 @@
 
 Entra sign-in is run by the app itself (see ``api.oidc``), so it works on any
 host rather than only on Azure. The password gate remains the first-run and
-break-glass route, and administration stays behind it.
+break-glass route. Administration is reachable either through it or, when an
+admin group is configured, by an Entra sign-in from a member of that group.
 """
 from __future__ import annotations
 

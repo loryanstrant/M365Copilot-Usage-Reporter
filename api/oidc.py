@@ -14,9 +14,10 @@ MSAL performs the security-critical validation (PKCE, ``state``, ``nonce``,
 issuer, audience and signature) inside ``acquire_token_by_auth_code_flow`` — we
 deliberately do not hand-roll any of it.
 
-Optionally checks membership of a configured Entra security group (via app-only
-Graph ``checkMemberGroups``). SSO users are viewers; administration stays behind
-the password gate.
+Optionally checks membership of configured Entra security groups (via app-only
+Graph ``checkMemberGroups``). SSO users are issued as viewers; whether they also
+administer is decided per request from the admin group, not from the token —
+see :func:`api.auth.is_admin`.
 """
 from __future__ import annotations
 

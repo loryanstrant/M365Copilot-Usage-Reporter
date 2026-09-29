@@ -57,13 +57,12 @@ export default function UsersPage() {
       header: "UPN",
       accessor: (u) => u.user_principal_name,
     },
+    // Company is deliberately not shown. In a single-tenant directory it is the
+    // same value on every row, and the ten columns overflowed the card at 1600px
+    // wide — pushing Prompts, the column people come here for, off the edge. The
+    // API still returns it.
     { key: "job_title", header: "Job title", accessor: (u) => u.job_title },
     { key: "department", header: "Department", accessor: (u) => u.department },
-    {
-      key: "company_name",
-      header: "Company",
-      accessor: (u) => u.company_name,
-    },
     {
       key: "office_location",
       header: "Office",
