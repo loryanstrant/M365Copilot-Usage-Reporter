@@ -52,7 +52,7 @@ export default function LoginPage() {
           <img
             src="/app-logo.png"
             alt="Microsoft 365 Copilot"
-            className="h-11 w-11 drop-shadow"
+            className="h-11 w-11 object-contain drop-shadow"
           />
           <span className="text-lg font-semibold">M365 Copilot Usage Reporter</span>
         </div>

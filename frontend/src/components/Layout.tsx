@@ -31,7 +31,11 @@ export default function Layout({ children }: { children: ReactNode }) {
       <SvgDefs />
       <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
         <div className="flex items-center gap-3 px-5 py-5">
-          <img src="/app-logo.png" alt="Copilot" className="h-8 w-8 shrink-0" />
+          <img
+            src="/app-logo.png"
+            alt="Microsoft 365 Copilot"
+            className="h-9 w-9 shrink-0 rounded-lg object-contain"
+          />
           <div>
             <div className="text-sm font-semibold text-brand-600 dark:text-brand-500">
               M365 Copilot
