@@ -21,7 +21,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api import metrics
-from api.auth import CurrentUser, get_current_user, require_org_view
+from api.auth import (
+    CurrentUser,
+    get_current_user,
+    personal_view_user_id,
+    require_org_view,
+)
 from api.filters import MetricFilters
 from api.schemas import DirectoryUserOut
 from shared.db import get_session
@@ -234,9 +239,17 @@ async def get_about() -> dict:
 # their token. There is deliberately no "which user?" parameter: if the caller
 # could name the user, any viewer could read anyone's activity by editing a URL.
 # --------------------------------------------------------------------------- #
-def _me_filters(user: CurrentUser, base: MetricFilters) -> MetricFilters:
-    """Narrow the shared slicers down to just this person."""
-    if not user.oid:
+async def _me_filters(
+    user: CurrentUser, base: MetricFilters, session: AsyncSession
+) -> MetricFilters:
+    """Narrow the shared slicers down to just this person.
+
+    Resolves through :func:`personal_view_user_id`, so the local admin sees the
+    demo persona's activity while demo data is loaded and nothing at all once it
+    is cleared.
+    """
+    me_id = await personal_view_user_id(user, session)
+    if not me_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=(
@@ -244,7 +257,7 @@ def _me_filters(user: CurrentUser, base: MetricFilters) -> MetricFilters:
                 "work account to see your own activity."
             ),
         )
-    base.user_ids = [user.oid]
+    base.user_ids = [me_id]
     return base
 
 
@@ -266,7 +279,7 @@ async def get_my_summary(
     filters: MetricFilters = Depends(get_filters),
     session: AsyncSession = Depends(get_session),
 ):
-    return await metrics.summary(session, filters=_me_filters(user, filters))
+    return await metrics.summary(session, filters=await _me_filters(user, filters, session))
 
 
 @me_router.get("/daily")
@@ -275,7 +288,7 @@ async def get_my_daily(
     filters: MetricFilters = Depends(get_filters),
     session: AsyncSession = Depends(get_session),
 ):
-    return await metrics.daily(session, filters=_me_filters(user, filters))
+    return await metrics.daily(session, filters=await _me_filters(user, filters, session))
 
 
 @me_router.get("/by-app")
@@ -284,7 +297,7 @@ async def get_my_by_app(
     filters: MetricFilters = Depends(get_filters),
     session: AsyncSession = Depends(get_session),
 ):
-    return await metrics.by_app(session, filters=_me_filters(user, filters))
+    return await metrics.by_app(session, filters=await _me_filters(user, filters, session))
 
 
 @me_router.get("/copilot-score")
@@ -293,7 +306,7 @@ async def get_my_copilot_score(
     filters: MetricFilters = Depends(get_filters),
     session: AsyncSession = Depends(get_session),
 ):
-    return await metrics.copilot_score(session, filters=_me_filters(user, filters))
+    return await metrics.copilot_score(session, filters=await _me_filters(user, filters, session))
 
 
 @me_router.get("/comparison")
@@ -312,7 +325,7 @@ async def get_my_comparison(
     org_filters = deepcopy(filters)
     org_filters.user_ids = []
 
-    mine = await metrics.summary(session, filters=_me_filters(user, deepcopy(filters)))
+    mine = await metrics.summary(session, filters=await _me_filters(user, deepcopy(filters), session))
     rows = await metrics.by_user(session, filters=org_filters)
 
     counts = sorted(

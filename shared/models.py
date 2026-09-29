@@ -139,6 +139,10 @@ class AppConfig(Base):
     # have to be a shared username and password. Blank grants admin to nobody:
     # unlike the org view, administration fails closed.
     admin_group_id: Mapped[str | None] = mapped_column(Text)
+    # Set only by an explicit demo seed: the directory user the local admin
+    # stands in for, so the personal pages can be opened without Entra. Cleared
+    # with the demo data, and dropped once a real collection succeeds.
+    demo_persona_user_id: Mapped[str | None] = mapped_column(Text)
     backfill_days: Mapped[int] = mapped_column(Integer, default=30)
     schedule_cron: Mapped[str | None] = mapped_column(Text)
     # Friendly schedule: run the incremental ingest every N hours (1..24).

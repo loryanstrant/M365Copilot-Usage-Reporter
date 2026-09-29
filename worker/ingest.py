@@ -28,7 +28,6 @@ from shared.models import (
     LicensedUser,
     Prompt,
 )
-from shared.demo import DEMO_PERSONA_KEY
 from shared.translations import load_translations
 from shared.upsert import bulk_upsert
 from worker.graph import GraphAuth, GraphClient
@@ -340,9 +339,9 @@ async def run_ingest(
             # borrowing is now misleading — it would keep showing a fictional
             # person's activity as "your" usage. Retire it here rather than
             # relying on someone remembering to press Clear demo data.
-            await session.execute(
-                delete(IngestState).where(IngestState.key == DEMO_PERSONA_KEY)
-            )
+            cfg_row = await session.get(AppConfig, 1)
+            if cfg_row is not None:
+                cfg_row.demo_persona_user_id = None
             job.status = "success"
             job.finished_at = datetime.now(timezone.utc)
             job.stats = stats

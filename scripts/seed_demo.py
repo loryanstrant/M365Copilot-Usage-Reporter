@@ -26,10 +26,9 @@ from sqlalchemy import delete
 
 from shared.db import SessionLocal
 from shared.migrate import upgrade_to_head
-from shared.demo import DEMO_PERSONA_KEY
 from shared.models import (
+    AppConfig,
     EntraUser,
-    IngestState,
     LicenseCount,
     LicensedUser,
     Prompt,
@@ -313,18 +312,11 @@ async def seed(days: int = 45, users: int = 90, reset: bool = True) -> dict[str,
             default=None,
         )
         if busiest is not None:
-            await session.merge(
-                IngestState(
-                    key=DEMO_PERSONA_KEY,
-                    last_status="seeded",
-                    last_run_at=now,
-                    detail={
-                        "user_id": busiest.user_id,
-                        "upn": busiest.upn,
-                        "display_name": busiest.display_name,
-                    },
-                )
-            )
+            cfg = await session.get(AppConfig, 1)
+            if cfg is None:
+                cfg = AppConfig(id=1)
+                session.add(cfg)
+            cfg.demo_persona_user_id = busiest.user_id
         await session.commit()
 
     return {
@@ -341,9 +333,9 @@ async def clear() -> dict[str, int]:
     async with SessionLocal() as session:
         # Drop the demo persona binding with the data it pointed at, so the
         # password admin stops borrowing an identity that no longer exists.
-        await session.execute(
-            delete(IngestState).where(IngestState.key == DEMO_PERSONA_KEY)
-        )
+        cfg = await session.get(AppConfig, 1)
+        if cfg is not None:
+            cfg.demo_persona_user_id = None
         await session.execute(delete(Prompt))
         await session.execute(delete(LicensedUser))
         await session.execute(delete(LicenseCount))

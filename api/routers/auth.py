@@ -21,6 +21,7 @@ from api.auth import (
     create_access_token,
     effective_role,
     get_current_user,
+    personal_view_user_id,
 )
 from api.oidc import (
     STATE_COOKIE,
@@ -34,8 +35,7 @@ from api.oidc import (
 )
 from api.schemas import AuthConfigOut, LoginIn, TokenOut, UserOut
 from shared.db import get_session
-from shared.demo import demo_persona
-from shared.models import AppConfig
+from shared.models import AppConfig, EntraUser
 
 logger = logging.getLogger("api.auth")
 
@@ -60,18 +60,10 @@ async def login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
         )
-    # With demo data loaded, the password admin borrows a seeded identity so
-    # the personal view — which is derived from the token's object ID — is
-    # reachable without Entra. No demo data, no binding, so a live deployment
-    # is unaffected.
-    persona = await demo_persona(session)
-    token = create_access_token(
-        user.username,
-        user.role,
-        oid=persona["user_id"] if persona else None,
-        upn=persona["upn"] if persona else None,
-        display_name=persona["display_name"] if persona else None,
-    )
+    # The demo persona is deliberately NOT minted into the token. It is resolved
+    # per request instead (see api.auth.personal_view_user_id), so clearing demo
+    # data takes effect at once rather than whenever this token happens to expire.
+    token = create_access_token(user.username, user.role)
     return TokenOut(access_token=token, username=user.username, role=user.role)
 
 
@@ -172,11 +164,21 @@ async def me(
     user: CurrentUser = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ) -> UserOut:
+    me_id = await personal_view_user_id(user, session)
+    display_name, upn = user.display_name, user.upn
+    # An admin standing in for a demo persona is, as far as the personal pages
+    # are concerned, that person — so name them rather than the account. Only
+    # reached when a demo seed set the binding.
+    if me_id and not user.oid:
+        profile = await session.get(EntraUser, me_id)
+        if profile is not None:
+            display_name = profile.display_name or display_name
+            upn = profile.upn or upn
     return UserOut(
         username=user.username,
         role=await effective_role(user, session),
-        display_name=user.display_name,
-        upn=user.upn,
+        display_name=display_name,
+        upn=upn,
         can_view_org=await can_view_org(user, session),
-        has_personal_view=user.has_personal_view,
+        has_personal_view=me_id is not None,
     )

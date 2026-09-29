@@ -7,7 +7,7 @@ pages in the README and never see one.
 """
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date
 
 import httpx
 import pytest
@@ -15,8 +15,7 @@ import pytest_asyncio
 from asgi_lifespan import LifespanManager
 
 from shared.db import SessionLocal
-from shared.demo import DEMO_PERSONA_KEY
-from shared.models import AppUser, EntraUser, IngestState, Prompt
+from shared.models import AppConfig, AppUser, EntraUser, Prompt
 from shared.security import hash_password
 
 PERSONA_ID = "11111111-2222-3333-4444-555555555555"
@@ -57,18 +56,7 @@ async def _seed_persona() -> None:
                     prompt_date=date(2026, 9, 1),
                 )
             )
-        s.add(
-            IngestState(
-                key=DEMO_PERSONA_KEY,
-                last_status="seeded",
-                last_run_at=datetime.now(timezone.utc),
-                detail={
-                    "user_id": PERSONA_ID,
-                    "upn": "ruby.chen@demo.local",
-                    "display_name": "Ruby Chen",
-                },
-            )
-        )
+        s.add(AppConfig(id=1, demo_persona_user_id=PERSONA_ID))
         await s.commit()
 
 
@@ -123,24 +111,19 @@ async def test_a_real_ingest_retires_the_demo_persona(client):
     await _seed_persona()
 
     from shared.db import SessionLocal as SL
-    from shared.demo import demo_persona
 
     async with SL() as s:
-        assert await demo_persona(s) is not None
+        cfg = await s.get(AppConfig, 1)
+        assert cfg.demo_persona_user_id == PERSONA_ID
 
     from worker.ingest import run_ingest
-    from shared.models import AppConfig
 
     async with SL() as s:
-        s.add(
-            AppConfig(
-                id=1,
-                tenant_id="t",
-                client_id="c",
-                client_secret_encrypted="x",
-                copilot_sku_ids=[],
-            )
-        )
+        cfg = await s.get(AppConfig, 1)
+        cfg.tenant_id = "t"
+        cfg.client_id = "c"
+        cfg.client_secret_encrypted = "x"
+        cfg.copilot_sku_ids = []
         await s.commit()
 
     class _Graph:
@@ -167,4 +150,5 @@ async def test_a_real_ingest_retires_the_demo_persona(client):
         await run_ingest(SL, graph=_Graph(), config=cfg, job_name="test")
 
     async with SL() as s:
-        assert await demo_persona(s) is None
+        cfg = await s.get(AppConfig, 1)
+        assert cfg.demo_persona_user_id is None
