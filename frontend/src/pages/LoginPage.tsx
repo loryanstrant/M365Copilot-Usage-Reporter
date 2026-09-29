@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useAuth } from "../auth/AuthContext";
 import { ApiError, api } from "../api/client";
+import { buildStamp } from "../lib/buildStamp";
 
 export default function LoginPage() {
   const { login, ssoError } = useAuth();
@@ -9,6 +10,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [entraEnabled, setEntraEnabled] = useState(false);
+  const [build, setBuild] = useState("");
 
   // Show the Microsoft sign-in button only once an Entra app registration has
   // been saved in Settings. This works on any host — it asks our own API, not
@@ -16,8 +18,13 @@ export default function LoginPage() {
   useEffect(() => {
     (async () => {
       try {
-        const cfg = await api<{ entra_enabled: boolean }>("/auth/config");
+        const cfg = await api<{
+          entra_enabled: boolean;
+          build_date: string | null;
+          build_time: string | null;
+        }>("/auth/config");
         setEntraEnabled(cfg.entra_enabled);
+        setBuild(buildStamp(cfg.build_date, cfg.build_time));
       } catch {
         /* API unreachable — leave the button hidden */
       }
@@ -66,7 +73,7 @@ export default function LoginPage() {
           </p>
         </div>
         <div className="relative text-sm text-brand-100/80">
-          Community project · MIT-licensed
+          Community project · MIT-licensed{build ? ` · ${build}` : ""}
         </div>
       </div>
 

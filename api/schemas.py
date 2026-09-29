@@ -41,6 +41,11 @@ class UserOut(BaseModel):
 class AuthConfigOut(BaseModel):
     entra_enabled: bool
     redirect_uri: str
+    # Build stamp, repeated here because this endpoint is reachable before
+    # sign-in. Knowing which build is live is most useful exactly when you
+    # cannot get in to look at the About page.
+    build_date: str | None = None
+    build_time: str | None = None
 
 
 # --- admin config -------------------------------------------------------

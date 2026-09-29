@@ -127,16 +127,42 @@ def _mount_frontend() -> None:
     from fastapi.responses import FileResponse
     from fastapi.staticfiles import StaticFiles
 
+    # Cache policy, and why it is split.
+    #
+    # Vite gives every asset a content hash in its filename, so an asset URL
+    # never changes meaning: it can be cached forever. index.html is the
+    # opposite — its URL never changes but its contents do, because it names
+    # the current hashed bundle.
+    #
+    # Serving index.html with no cache directive at all (which is what this
+    # did) lets the browser apply its own heuristic and hold on to it. The
+    # result is an upgraded deployment where the server has the new bundle,
+    # says so correctly, and the browser keeps asking for the old one it still
+    # remembers — indistinguishable, from the outside, from a deploy that
+    # silently failed.
+    ASSET_CACHE = "public, max-age=31536000, immutable"
+    HTML_CACHE = "no-cache"  # revalidate every time; the file is ~0.5 KB
+
+    class ImmutableAssets(StaticFiles):
+        async def get_response(self, path: str, scope):
+            response = await super().get_response(path, scope)
+            if response.status_code == 200:
+                response.headers["Cache-Control"] = ASSET_CACHE
+            return response
+
     assets_dir = os.path.join(dist, "assets")
     if os.path.isdir(assets_dir):
-        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+        app.mount("/assets", ImmutableAssets(directory=assets_dir), name="assets")
 
     @app.get("/{full_path:path}", include_in_schema=False)
     async def spa_fallback(full_path: str) -> FileResponse:
         candidate = os.path.join(dist, full_path)
         if full_path and os.path.isfile(candidate):
-            return FileResponse(candidate)
-        return FileResponse(index_path)
+            # Files served from the bundle root (favicon, logos, the suite
+            # thumbnails) keep their names across releases, so they have to
+            # revalidate too or a refreshed logo never arrives.
+            return FileResponse(candidate, headers={"Cache-Control": HTML_CACHE})
+        return FileResponse(index_path, headers={"Cache-Control": HTML_CACHE})
 
     logger.info("Serving frontend bundle from %s", dist)
 
