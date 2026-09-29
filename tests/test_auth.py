@@ -126,3 +126,39 @@ async def test_status_endpoint(session):
         assert body["configured"] is False
         assert body["prompts"] == 0
         assert body["last_run"] is None
+
+
+@pytest.mark.asyncio
+async def test_auth_config_reports_the_build_stamp(monkeypatch):
+    """The sign-in page shows which build is live.
+
+    Reported here rather than only on the About page because knowing the answer
+    matters most when you cannot get in to look — including when you are trying
+    to work out whether a deployment actually landed.
+    """
+    import shared.version as version
+
+    monkeypatch.setattr(version, "BUILD_DATE", "2026-09-30")
+    monkeypatch.setattr(version, "BUILD_TIME", "07:57 UTC")
+    import api.routers.auth as auth_routes
+
+    monkeypatch.setattr(auth_routes, "BUILD_DATE", "2026-09-30")
+    monkeypatch.setattr(auth_routes, "BUILD_TIME", "07:57 UTC")
+
+    async with LifespanManager(app), _client() as client:
+        body = (await client.get("/auth/config")).json()
+        assert body["build_date"] == "2026-09-30"
+        assert body["build_time"] == "07:57 UTC"
+
+
+@pytest.mark.asyncio
+async def test_auth_config_admits_when_there_is_no_stamp(monkeypatch):
+    """A local build injects nothing, and must say so rather than invent a date."""
+    import api.routers.auth as auth_routes
+
+    monkeypatch.setattr(auth_routes, "BUILD_DATE", None)
+    monkeypatch.setattr(auth_routes, "BUILD_TIME", None)
+
+    async with LifespanManager(app), _client() as client:
+        body = (await client.get("/auth/config")).json()
+        assert body["build_date"] is None
