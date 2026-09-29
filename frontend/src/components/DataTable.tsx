@@ -44,6 +44,10 @@ interface Props<Row> {
   initialSort?: SortState;
   emptyMessage?: string;
   rowClassName?: (row: Row) => string;
+  onRowClick?: (row: Row) => void;
+  /** When set, the table body scrolls within this pixel height and the header
+   * sticks to the top — keeps long tables from pushing the page scrollbar away. */
+  maxBodyHeight?: number;
   /** Show a per-column filter row, and a "N of M rows" count beneath. */
   filterable?: boolean;
 }
@@ -82,6 +86,8 @@ export default function DataTable<Row>({
   initialSort,
   emptyMessage = "No data yet.",
   rowClassName,
+  onRowClick,
+  maxBodyHeight,
   filterable = false,
 }: Props<Row>) {
   const [sort, setSort] = useState<SortState | null>(initialSort ?? null);
@@ -138,10 +144,14 @@ export default function DataTable<Row>({
     a === "right" ? "text-right" : a === "center" ? "text-center" : "text-left";
 
   return (
-    <div className="overflow-x-auto">
+    <>
+    <div
+      className="overflow-auto"
+      style={maxBodyHeight ? { maxHeight: `${maxBodyHeight}px` } : undefined}
+    >
       <table className="w-full text-sm">
-        <thead>
-          <tr className="text-xs uppercase tracking-wide text-slate-400">
+        <thead className={maxBodyHeight ? "sticky top-0 z-10" : undefined}>
+          <tr className="bg-white text-xs uppercase tracking-wide text-slate-400 dark:bg-slate-800">
             {columns.map((col) => {
               const canSort = col.sortable !== false && !!col.accessor;
               const active = sort?.key === col.key;
@@ -173,7 +183,7 @@ export default function DataTable<Row>({
             })}
           </tr>
           {filterable && (
-            <tr>
+            <tr className="bg-white dark:bg-slate-800">
               {columns.map((col) => {
                 const canFilter = col.filterable !== false && !!col.accessor;
                 return (
@@ -209,6 +219,7 @@ export default function DataTable<Row>({
             sortedRows.map((row, i) => (
               <tr
                 key={getRowKey(row, i)}
+                onClick={onRowClick ? () => onRowClick(row) : undefined}
                 className={`border-t border-slate-100 dark:border-slate-700 ${
                   rowClassName?.(row) ?? ""
                 }`}
@@ -235,14 +246,15 @@ export default function DataTable<Row>({
           )}
         </tbody>
       </table>
-      {filterable && rows.length > 0 && (
-        <div className="px-5 py-3 text-xs text-slate-400 dark:text-slate-500">
-          {sortedRows.length === rows.length
-            ? `${rows.length.toLocaleString()} rows`
-            : `${sortedRows.length.toLocaleString()} of ${rows.length.toLocaleString()} rows`}
-        </div>
-      )}
     </div>
+    {filterable && rows.length > 0 && (
+      <div className="px-5 py-3 text-xs text-slate-400 dark:text-slate-500">
+        {sortedRows.length === rows.length
+          ? `${rows.length.toLocaleString()} rows`
+          : `${sortedRows.length.toLocaleString()} of ${rows.length.toLocaleString()} rows`}
+      </div>
+    )}
+    </>
   );
 }
 

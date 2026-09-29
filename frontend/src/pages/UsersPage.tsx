@@ -136,6 +136,9 @@ export default function UsersPage() {
           getRowKey={(u) => u.user_id}
           initialSort={{ key: "display_name", dir: "asc" }}
           filterable
+          // A tenant directory is thousands of rows; without this the column
+          // headers and their filter boxes scroll out of reach on the way down.
+          maxBodyHeight={620}
           emptyMessage="No users imported yet. Configure the app registration in Settings, then run a collection."
         />
       </ChartCard>
