@@ -28,6 +28,7 @@ from shared.models import (
     LicensedUser,
     Prompt,
 )
+from shared.demo import DEMO_PERSONA_KEY
 from shared.translations import load_translations
 from shared.upsert import bulk_upsert
 from worker.graph import GraphAuth, GraphClient
@@ -133,6 +134,11 @@ async def sync_licensed_users(
     """Refresh the ``licensed_users`` snapshot from Graph."""
     if granting_skus is None:
         granting_skus = await resolve_granting_skus(graph, config)
+    if not granting_skus:
+        # Nothing in this tenant grants Copilot, so nobody is licensed. Say so
+        # by clearing the table rather than leaving yesterday's answer behind.
+        await session.execute(delete(LicensedUser))
+        return 0
     rows: list[dict[str, Any]] = []
     async for user in graph.iter_licensed_users(sorted(granting_skus)):
         # The Graph filter matches the SKU; it cannot express "and the Copilot
@@ -329,6 +335,13 @@ async def run_ingest(
             stats["prompts"] = await sync_prompts(session, graph, config, now)
             stats["entra_users"] = await sync_entra_users(
                 session, graph, config, granting
+            )
+            # Real data has arrived, so the demo persona the password admin was
+            # borrowing is now misleading — it would keep showing a fictional
+            # person's activity as "your" usage. Retire it here rather than
+            # relying on someone remembering to press Clear demo data.
+            await session.execute(
+                delete(IngestState).where(IngestState.key == DEMO_PERSONA_KEY)
             )
             job.status = "success"
             job.finished_at = datetime.now(timezone.utc)

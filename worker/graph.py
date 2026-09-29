@@ -170,7 +170,15 @@ class GraphClient:
     async def iter_licensed_users(
         self, sku_ids: list[str]
     ) -> AsyncIterator[dict[str, Any]]:
-        """Yield users holding any of the configured Copilot SKUs."""
+        """Yield users holding any of the given SKUs.
+
+        An empty list yields nothing. Joining an empty list would send Graph a
+        blank ``$filter``, which either errors or — worse — quietly returns the
+        entire directory, so a tenant that owns no Copilot subscription would
+        pull every user it has on every ingest.
+        """
+        if not sku_ids:
+            return
         clause = " or ".join(
             f"assignedLicenses/any(u:u/skuId eq {sku})" for sku in sku_ids
         )

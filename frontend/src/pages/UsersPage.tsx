@@ -44,7 +44,9 @@ export default function UsersPage() {
     [users],
   );
 
-  const columns: Column<DirectoryUser>[] = [
+  // Memoised: DataTable's filter and sort both key off this array, so a fresh
+  // literal each render would defeat their memoisation on every keystroke.
+  const columns: Column<DirectoryUser>[] = useMemo(() => [
     {
       key: "display_name",
       header: "Name",
@@ -90,7 +92,7 @@ export default function UsersPage() {
       // A free-text filter on a count helps nobody.
       filterable: false,
     },
-  ];
+  ], []);
 
   if (loading) {
     return <div className="text-slate-500 dark:text-slate-400">Loading…</div>;

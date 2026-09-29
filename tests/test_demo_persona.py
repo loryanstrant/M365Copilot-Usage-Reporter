@@ -114,3 +114,57 @@ async def test_clearing_demo_data_removes_the_binding(client):
     await clear()
     body = (await client.get("/auth/me", headers=await _login(client))).json()
     assert body["has_personal_view"] is False
+
+
+@pytest.mark.asyncio
+async def test_a_real_ingest_retires_the_demo_persona(client):
+    """Once live data arrives, borrowing a fictional identity is misleading."""
+    await _add_admin()
+    await _seed_persona()
+
+    from shared.db import SessionLocal as SL
+    from shared.demo import demo_persona
+
+    async with SL() as s:
+        assert await demo_persona(s) is not None
+
+    from worker.ingest import run_ingest
+    from shared.models import AppConfig
+
+    async with SL() as s:
+        s.add(
+            AppConfig(
+                id=1,
+                tenant_id="t",
+                client_id="c",
+                client_secret_encrypted="x",
+                copilot_sku_ids=[],
+            )
+        )
+        await s.commit()
+
+    class _Graph:
+        async def iter_licensed_users(self, sku_ids):
+            if False:
+                yield {}
+
+        async def get_subscribed_skus(self):
+            return []
+
+        async def iter_directory_users(self):
+            if False:
+                yield {}
+
+        async def iter_enterprise_interactions(self, *a, **k):
+            if False:
+                yield {}
+
+        async def aclose(self):
+            pass
+
+    async with SL() as s:
+        cfg = await s.get(AppConfig, 1)
+        await run_ingest(SL, graph=_Graph(), config=cfg, job_name="test")
+
+    async with SL() as s:
+        assert await demo_persona(s) is None

@@ -156,3 +156,11 @@ def test_every_subscription_is_listed_with_whether_it_counts():
 def test_a_known_sku_gets_a_readable_name():
     rows = describe_granting_skus(TENANT, copilot_granting_skus(TENANT))
     assert {r["sku_id"]: r["name"] for r in rows}[E7] == "Microsoft 365 E7"
+
+
+# --------------------------------------------------------------------------- #
+# A tenant that owns no Copilot subscription
+# --------------------------------------------------------------------------- #
+def test_a_tenant_with_no_copilot_subscription_grants_nothing():
+    assert copilot_granting_skus([_sku(E5, copilot=False)]) == set()
+    assert copilot_granting_skus([]) == set()
