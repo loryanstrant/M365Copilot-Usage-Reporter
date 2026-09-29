@@ -16,7 +16,12 @@ export default function KpiCard({
       <div className="mt-2 bg-gradient-to-br from-slate-900 to-slate-500 bg-clip-text text-3xl font-bold tabular-nums text-transparent dark:from-white dark:to-slate-400">
         {value}
       </div>
-      {hint && <div className="mt-1 text-xs text-slate-400 dark:text-slate-500">{hint}</div>}
+      {/* Always rendered, even when empty. A conditional hint made tiles in the
+          same grid row different heights, so a row with one subtitle looked
+          ragged rather than deliberate. */}
+      <div className="mt-1 min-h-[1rem] text-xs text-slate-400 dark:text-slate-500">
+        {hint}
+      </div>
     </div>
   );
 }

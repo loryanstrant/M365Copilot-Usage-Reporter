@@ -89,6 +89,14 @@ async def summary(
             )
         )
     ) or 0
+    # Distinct days with any activity, inside the same filter as the counts
+    # above. On the personal view this is "days you actually used Copilot",
+    # which is what makes the prompt count mean something.
+    active_days = (
+        await session.scalar(
+            _prompt_query(f, func.count(distinct(Prompt.prompt_date)))
+        )
+    ) or 0
     licensed_users = (
         await session.scalar(select(func.count()).select_from(LicensedUser))
     ) or 0
@@ -115,6 +123,7 @@ async def summary(
         "conversations": conversations,
         "avg_prompts_per_conversation": _avg(prompts, conversations),
         "active_users": active_users,
+        "active_days": active_days,
         "licensed_users": licensed_users,
         "directory_users": directory_users,
         "adoption_rate": round(active_users / licensed_users, 4)

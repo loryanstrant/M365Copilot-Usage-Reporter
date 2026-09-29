@@ -81,12 +81,22 @@ export default function Layout({ children }: { children: ReactNode }) {
             </>
           )}
 
-          <NavSectionLabel>Help</NavSectionLabel>
           {user?.role === "admin" && (
-            <NavLink to="/settings" className={navClass}>
-              Settings
-            </NavLink>
+            <>
+              <NavSectionLabel>Administration</NavSectionLabel>
+              <NavLink to="/settings" className={navClass}>
+                Settings
+              </NavLink>
+              <NavLink to="/backfill" className={navClass}>
+                Backfill
+              </NavLink>
+            </>
           )}
+
+          <NavSectionLabel>Help</NavSectionLabel>
+          <NavLink to="/help" className={navClass}>
+            Setup guide
+          </NavLink>
           <NavLink to="/about" className={navClass}>
             About
           </NavLink>
