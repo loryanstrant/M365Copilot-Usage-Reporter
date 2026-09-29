@@ -78,6 +78,9 @@ export default function Layout({ children }: { children: ReactNode }) {
               <NavLink to="/licenses" className={navClass}>
                 Licenses
               </NavLink>
+              <NavLink to="/users" className={navClass}>
+                Tenant users
+              </NavLink>
             </>
           )}
 

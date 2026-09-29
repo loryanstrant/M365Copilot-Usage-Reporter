@@ -13,6 +13,7 @@ from typing import Any
 
 from sqlalchemy import Select, and_, distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import aliased
 
 from api.filters import MetricFilters
 from shared.models import EntraUser, JobRun, LicenseCount, LicensedUser, Prompt
@@ -142,6 +143,51 @@ async def copilot_score(
     f = filters or MetricFilters()
     prompts = (await session.scalar(_prompt_query(f, func.count()))) or 0
     return {"prompts": prompts, "score": copilot_score_from_count(prompts)}
+
+
+async def directory_users(session: AsyncSession) -> list[dict[str, Any]]:
+    """The imported tenant directory, with each person's prompt count.
+
+    Ordered by name so the page opens on something readable. The prompt total
+    is joined in because "who is licensed but never uses it" is the question
+    this list actually gets opened for, and answering it elsewhere would mean
+    exporting two lists and matching them by hand.
+    """
+    prompts = (
+        select(Prompt.user_id, func.count().label("prompts"))
+        .group_by(Prompt.user_id)
+        .subquery()
+    )
+    manager = aliased(EntraUser)
+    rows = (
+        await session.execute(
+            select(
+                EntraUser,
+                func.coalesce(prompts.c.prompts, 0).label("prompts"),
+                manager.display_name.label("manager_name"),
+            )
+            .outerjoin(prompts, prompts.c.user_id == EntraUser.user_id)
+            .outerjoin(manager, manager.user_id == EntraUser.manager_id)
+            .order_by(EntraUser.display_name)
+        )
+    ).all()
+    return [
+        {
+            "user_id": u.user_id,
+            "user_principal_name": u.upn,
+            "display_name": u.display_name,
+            "job_title": u.job_title,
+            "department": u.department,
+            "company_name": u.company_name,
+            "office_location": u.office_location,
+            "country": u.country,
+            "manager_name": manager_name,
+            "user_type": u.user_type,
+            "has_copilot_license": bool(u.has_copilot_license),
+            "prompts": int(prompt_count or 0),
+        }
+        for u, prompt_count, manager_name in rows
+    ]
 
 
 async def daily(

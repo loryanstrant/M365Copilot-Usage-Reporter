@@ -10,6 +10,7 @@ import CoachingPage from "./pages/CoachingPage";
 import LaggardsPage from "./pages/LaggardsPage";
 import LeaderboardsPage from "./pages/LeaderboardsPage";
 import LicensesPage from "./pages/LicensesPage";
+import UsersPage from "./pages/UsersPage";
 import LocationsPage from "./pages/LocationsPage";
 import LoginPage from "./pages/LoginPage";
 import OverviewPage from "./pages/OverviewPage";
@@ -69,6 +70,7 @@ export default function App() {
           <Route path="/laggards" element={org(<LaggardsPage />)} />
           <Route path="/coaching" element={org(<CoachingPage />)} />
           <Route path="/licenses" element={org(<LicensesPage />)} />
+          <Route path="/users" element={org(<UsersPage />)} />
           <Route path="/help" element={<SetupGuidePage />} />
           <Route path="/about" element={<AboutPage />} />
           <Route

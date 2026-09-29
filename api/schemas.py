@@ -81,6 +81,23 @@ class CopilotSkuOut(BaseModel):
     assigned: int = 0
 
 
+class DirectoryUserOut(BaseModel):
+    """One row of the tenant users listing."""
+
+    user_id: str
+    user_principal_name: str | None = None
+    display_name: str | None = None
+    job_title: str | None = None
+    department: str | None = None
+    company_name: str | None = None
+    office_location: str | None = None
+    country: str | None = None
+    manager_name: str | None = None
+    user_type: str | None = None
+    has_copilot_license: bool = False
+    prompts: int = 0
+
+
 class TestConnectionOut(BaseModel):
     ok: bool
     token_acquired: bool = False

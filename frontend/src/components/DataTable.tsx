@@ -4,6 +4,11 @@ import { useMemo, useState, type ReactNode } from "react";
 // directions according to its type: text sorts alphabetically, number sorts
 // numerically, and date sorts chronologically (newest/oldest). Empty values
 // (null / undefined / "") always sort to the bottom regardless of direction.
+//
+// Tables of people or other long lists can also opt into a row of per-column
+// filter boxes by passing `filterable`. It is opt-in rather than automatic
+// because most tables here are short summaries where a filter row is noise —
+// but a directory of a few thousand users is unusable without one.
 
 export type ColumnType = "text" | "number" | "date";
 export type SortDir = "asc" | "desc";
@@ -22,6 +27,9 @@ export interface Column<Row> {
   sortable?: boolean;
   /** Extra classes for the body cell. */
   className?: string;
+  /** Exclude this column from the filter row (only relevant when the table
+   *  is filterable). Defaults to filterable when the column has an accessor. */
+  filterable?: boolean;
 }
 
 export interface SortState {
@@ -36,6 +44,8 @@ interface Props<Row> {
   initialSort?: SortState;
   emptyMessage?: string;
   rowClassName?: (row: Row) => string;
+  /** Show a per-column filter row, and a "N of M rows" count beneath. */
+  filterable?: boolean;
 }
 
 function isEmpty(v: string | number | null | undefined): boolean {
@@ -72,10 +82,30 @@ export default function DataTable<Row>({
   initialSort,
   emptyMessage = "No data yet.",
   rowClassName,
+  filterable = false,
 }: Props<Row>) {
   const [sort, setSort] = useState<SortState | null>(initialSort ?? null);
+  const [filters, setFilters] = useState<Record<string, string>>({});
+
+  // Case-insensitive substring per column, ANDed across columns — the same
+  // behaviour people expect from a spreadsheet filter.
+  const filteredRows = useMemo(() => {
+    if (!filterable) return rows;
+    const active = Object.entries(filters).filter(([, term]) => term.trim());
+    if (active.length === 0) return rows;
+    return rows.filter((row) =>
+      active.every(([key, term]) => {
+        const col = columns.find((c) => c.key === key);
+        if (!col?.accessor) return true;
+        return String(col.accessor(row) ?? "")
+          .toLowerCase()
+          .includes(term.trim().toLowerCase());
+      }),
+    );
+  }, [rows, columns, filters, filterable]);
 
   const sortedRows = useMemo(() => {
+    const rows = filteredRows;
     if (!sort) return rows;
     const col = columns.find((c) => c.key === sort.key);
     if (!col || !col.accessor) return rows;
@@ -93,7 +123,7 @@ export default function DataTable<Row>({
       const cmp = compareValues(va as string | number, vb as string | number, type);
       return dir === "asc" ? cmp : -cmp;
     });
-  }, [rows, sort, columns]);
+  }, [filteredRows, sort, columns]);
 
   function toggle(col: Column<Row>) {
     const type = col.type ?? "text";
@@ -142,6 +172,28 @@ export default function DataTable<Row>({
               );
             })}
           </tr>
+          {filterable && (
+            <tr>
+              {columns.map((col) => {
+                const canFilter = col.filterable !== false && !!col.accessor;
+                return (
+                  <th key={col.key} className="px-5 pb-3">
+                    {canFilter && (
+                      <input
+                        value={filters[col.key] ?? ""}
+                        onChange={(e) =>
+                          setFilters((f) => ({ ...f, [col.key]: e.target.value }))
+                        }
+                        placeholder="Filter…"
+                        aria-label={`Filter by ${col.header}`}
+                        className="w-full rounded border border-slate-200 bg-white px-2 py-1 text-xs font-normal normal-case tracking-normal text-slate-700 outline-none focus:border-brand-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-200"
+                      />
+                    )}
+                  </th>
+                );
+              })}
+            </tr>
+          )}
         </thead>
         <tbody>
           {sortedRows.length === 0 ? (
@@ -183,6 +235,13 @@ export default function DataTable<Row>({
           )}
         </tbody>
       </table>
+      {filterable && rows.length > 0 && (
+        <div className="px-5 py-3 text-xs text-slate-400 dark:text-slate-500">
+          {sortedRows.length === rows.length
+            ? `${rows.length.toLocaleString()} rows`
+            : `${sortedRows.length.toLocaleString()} of ${rows.length.toLocaleString()} rows`}
+        </div>
+      )}
     </div>
   );
 }

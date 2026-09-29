@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api import metrics
 from api.auth import CurrentUser, get_current_user, require_org_view
 from api.filters import MetricFilters
+from api.schemas import DirectoryUserOut
 from shared.db import get_session
 
 router = APIRouter(
@@ -245,6 +246,18 @@ def _me_filters(user: CurrentUser, base: MetricFilters) -> MetricFilters:
         )
     base.user_ids = [user.oid]
     return base
+
+
+@router.get("/users", response_model=list[DirectoryUserOut])
+async def get_directory_users(
+    session: AsyncSession = Depends(get_session),
+) -> list[dict]:
+    """The imported tenant directory, for sorting and filtering in the UI.
+
+    Unpaginated on purpose: the page filters client-side so typing is instant,
+    and a tenant directory is tens of thousands of rows at the very most.
+    """
+    return await metrics.directory_users(session)
 
 
 @me_router.get("/summary")
