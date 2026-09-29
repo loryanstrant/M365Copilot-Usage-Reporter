@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { api } from "../api/client";
 import type { Briefing, BriefingApp, DailyPoint } from "../api/types";
+import AppBars from "../components/AppBars";
 import ChartCard from "../components/ChartCard";
 import ChartTooltip from "../components/ChartTooltip";
-import { appLogoSrc } from "../components/AppLabel";
 import { gradId } from "../components/chartTheme";
 
 type Tone = "positive" | "negative" | "neutral";
@@ -299,45 +299,14 @@ export default function BriefingPage() {
         <h3 className="mb-4 text-sm font-semibold text-slate-700 dark:text-slate-200">
           Leading surfaces
         </h3>
-        {b.top_apps.length === 0 ? (
-          <div className="text-sm text-slate-400">No app usage this period.</div>
-        ) : (
-          <div className="space-y-3">
-            {b.top_apps.map((a) => {
-              const d = appDelta(a);
-              const max = b.top_apps[0].prompts || 1;
-              const src = appLogoSrc(a.name);
-              return (
-                <div key={a.name ?? "—"} className="flex items-center gap-3">
-                  {src ? (
-                    <img src={src} alt="" aria-hidden className="h-5 w-5 shrink-0 object-contain" />
-                  ) : (
-                    <span className="h-5 w-5 shrink-0" aria-hidden />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="truncate text-sm font-medium text-slate-800 dark:text-slate-100">
-                        {a.name ?? "—"}
-                      </span>
-                      <div className="flex shrink-0 items-center gap-2">
-                        <span className="tabular-nums text-sm text-slate-500 dark:text-slate-400">
-                          {a.prompts.toLocaleString()}
-                        </span>
-                        <DeltaChip d={d} />
-                      </div>
-                    </div>
-                    <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-700">
-                      <div
-                        className="h-full rounded-full bg-brand-500"
-                        style={{ width: `${(a.prompts / max) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+        <AppBars
+          rows={b.top_apps.map((a) => ({
+            name: a.name,
+            value: a.prompts,
+            trailing: <DeltaChip d={appDelta(a)} />,
+          }))}
+          emptyMessage="No app usage this period."
+        />
       </div>
 
       <ListCard title="Suggested actions" tone="neutral" items={actions} empty="" numbered />

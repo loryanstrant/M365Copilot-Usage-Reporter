@@ -27,6 +27,7 @@ from sqlalchemy import delete
 from shared.db import SessionLocal
 from shared.migrate import upgrade_to_head
 from shared.models import (
+    AppConfig,
     EntraUser,
     LicenseCount,
     LicensedUser,
@@ -148,6 +149,16 @@ def _make_users(rng: random.Random, count: int) -> list[EntraUser]:
                 has_copilot_license=licensed,
             )
         )
+    # Give each department a manager drawn from its own people, so the manager
+    # column and the manager slicer have something to show. Without this every
+    # row reads "—" and the feature looks broken rather than unpopulated.
+    by_dept: dict[str, list[EntraUser]] = {}
+    for u in users:
+        by_dept.setdefault(u.department or "", []).append(u)
+    for members in by_dept.values():
+        lead = members[0]
+        for u in members[1:]:
+            u.manager_id = lead.user_id
     return users
 
 
@@ -286,6 +297,26 @@ async def seed(days: int = 45, users: int = 90, reset: bool = True) -> dict[str,
         )
         session.add_all(licence_counts)
         session.add_all(prompts)
+
+        # Record one seeded person as "the demo persona". Signing in with the
+        # local admin password gives you no directory identity, so the personal
+        # pages this app advertises were unreachable when evaluating with demo
+        # data — you could read about them but never see them. The login route
+        # binds the password admin to this person while demo data is loaded,
+        # and clear() removes the binding along with the data.
+        # The busiest licensed person is chosen so the personal view has
+        # something worth looking at.
+        busiest = max(
+            licensed,
+            key=lambda u: sum(1 for pr in prompts if pr.user_id == u.user_id),
+            default=None,
+        )
+        if busiest is not None:
+            cfg = await session.get(AppConfig, 1)
+            if cfg is None:
+                cfg = AppConfig(id=1)
+                session.add(cfg)
+            cfg.demo_persona_user_id = busiest.user_id
         await session.commit()
 
     return {
@@ -300,6 +331,11 @@ async def seed(days: int = 45, users: int = 90, reset: bool = True) -> dict[str,
 async def clear() -> dict[str, int]:
     """Remove all seeded usage data, leaving credentials and accounts intact."""
     async with SessionLocal() as session:
+        # Drop the demo persona binding with the data it pointed at, so the
+        # password admin stops borrowing an identity that no longer exists.
+        cfg = await session.get(AppConfig, 1)
+        if cfg is not None:
+            cfg.demo_persona_user_id = None
         await session.execute(delete(Prompt))
         await session.execute(delete(LicensedUser))
         await session.execute(delete(LicenseCount))

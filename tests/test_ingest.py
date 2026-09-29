@@ -25,6 +25,7 @@ from worker.ingest import run_ingest, sync_users
 
 NOW = datetime(2026, 7, 29, 12, 0, 0, tzinfo=timezone.utc)
 SKU = "639dec6b-bb19-468b-871c-c5c441c4b0cb"
+COPILOT_PLAN = "3f30311c-6b1e-48a4-ab79-725b469da960"
 
 
 class FakeGraph:
@@ -68,11 +69,18 @@ def _config() -> AppConfig:
 
 
 def _fake_graph() -> FakeGraph:
-    licensed = [{"id": "user-1"}, {"id": "user-2"}]
+    # Graph returns assignedLicenses on these (the ingest asks for them), and
+    # the app checks the Copilot service plan is not disabled per assignment,
+    # so the fake has to carry them or it is not testing the real path.
+    licensed = [
+        {"id": "user-1", "assignedLicenses": [{"skuId": SKU, "disabledPlans": []}]},
+        {"id": "user-2", "assignedLicenses": [{"skuId": SKU, "disabledPlans": []}]},
+    ]
     skus = [
         {
             "skuId": SKU,
             "capabilityStatus": "Enabled",
+            "servicePlans": [{"servicePlanId": COPILOT_PLAN}],
             "consumedUnits": 2,
             "prepaidUnits": {"enabled": 5, "suspended": 0, "warning": 0, "lockedOut": 0},
         },
@@ -86,7 +94,7 @@ def _fake_graph() -> FakeGraph:
             "userType": "Member",
             "accountEnabled": True,
             "displayName": "Alice",
-            "assignedLicenses": [{"skuId": SKU}],
+            "assignedLicenses": [{"skuId": SKU, "disabledPlans": []}],
             "manager": {"id": "mgr-1"},
         },
         {  # excluded: onmicrosoft.com service account

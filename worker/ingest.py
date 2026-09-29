@@ -28,11 +28,15 @@ from shared.models import (
     LicensedUser,
     Prompt,
 )
-from shared.upsert import bulk_upsert
 from shared.translations import load_translations
+from shared.upsert import bulk_upsert
 from worker.graph import GraphAuth, GraphClient
+from worker.licensing import (
+    copilot_granting_skus,
+    describe_granting_skus,
+    has_copilot_license,
+)
 from worker.transforms import (
-    has_configured_sku,
     is_included_entra_user,
     transform_entra_user,
     transform_interaction,
@@ -109,12 +113,37 @@ def build_graph_client(config: AppConfig) -> GraphClient:
 
 
 # --- individual sync steps ---------------------------------------------
+async def resolve_granting_skus(graph: GraphLike, config: AppConfig) -> set[str]:
+    """Which of the tenant's SKUs grant Copilot.
+
+    Asks the tenant rather than matching a hard-coded list, so E7 and any
+    future Copilot-bearing SKU are covered without a code change. The stored
+    ``copilot_sku_ids`` is honoured as a manual override when set.
+    """
+    skus = await graph.get_subscribed_skus()
+    return copilot_granting_skus(skus, override=list(config.copilot_sku_ids or []))
+
+
 async def sync_licensed_users(
-    session: AsyncSession, graph: GraphLike, config: AppConfig
+    session: AsyncSession,
+    graph: GraphLike,
+    config: AppConfig,
+    granting_skus: set[str] | None = None,
 ) -> int:
     """Refresh the ``licensed_users`` snapshot from Graph."""
+    if granting_skus is None:
+        granting_skus = await resolve_granting_skus(graph, config)
+    if not granting_skus:
+        # Nothing in this tenant grants Copilot, so nobody is licensed. Say so
+        # by clearing the table rather than leaving yesterday's answer behind.
+        await session.execute(delete(LicensedUser))
+        return 0
     rows: list[dict[str, Any]] = []
-    async for user in graph.iter_licensed_users(list(config.copilot_sku_ids)):
+    async for user in graph.iter_licensed_users(sorted(granting_skus)):
+        # The Graph filter matches the SKU; it cannot express "and the Copilot
+        # plan is not disabled for this person", so that is checked here.
+        if not has_copilot_license(user, granting_skus):
+            continue
         uid = user.get("id")
         if uid:
             rows.append({"user_id": uid})
@@ -126,12 +155,24 @@ async def sync_licensed_users(
 
 
 async def sync_license_counts(
-    session: AsyncSession, graph: GraphLike, config: AppConfig, now: datetime
+    session: AsyncSession,
+    graph: GraphLike,
+    config: AppConfig,
+    now: datetime,
+    granting_skus: set[str] | None = None,
 ) -> int:
-    """Record today's Copilot license totals (idempotent per day)."""
-    target = set(config.copilot_sku_ids)
+    """Record today's Copilot license totals (idempotent per day).
+
+    More than one SKU can grant Copilot, so this writes a row per granting
+    subscription and callers must aggregate rather than assume a single row.
+    """
     today = now.date()
     skus = await graph.get_subscribed_skus()
+    target = (
+        granting_skus
+        if granting_skus is not None
+        else copilot_granting_skus(skus, override=list(config.copilot_sku_ids or []))
+    )
     await session.execute(
         delete(LicenseCount).where(LicenseCount.recorded_date == today)
     )
@@ -210,10 +251,14 @@ async def sync_prompts(
 
 
 async def sync_entra_users(
-    session: AsyncSession, graph: GraphLike, config: AppConfig
+    session: AsyncSession,
+    graph: GraphLike,
+    config: AppConfig,
+    granting_skus: set[str] | None = None,
 ) -> int:
     """Upsert filtered directory users into ``entra_users``."""
-    sku_ids = list(config.copilot_sku_ids)
+    if granting_skus is None:
+        granting_skus = await resolve_granting_skus(graph, config)
     batch: list[dict[str, Any]] = []
     count = 0
 
@@ -235,7 +280,7 @@ async def sync_entra_users(
         if not is_included_entra_user(user):
             continue
         row = transform_entra_user(
-            user, has_copilot_license=has_configured_sku(user, sku_ids)
+            user, has_copilot_license=has_copilot_license(user, granting_skus)
         )
         if row.get("user_id"):
             batch.append(row)
@@ -276,12 +321,27 @@ async def run_ingest(
         await session.flush()
         stats: dict[str, Any] = {}
         try:
-            stats["licensed_users"] = await sync_licensed_users(session, graph, config)
+            # Resolved once and threaded through: every step needs the same
+            # answer, and subscribedSkus is a per-tenant fact, not a per-step one.
+            granting = await resolve_granting_skus(graph, config)
+            stats["copilot_skus"] = len(granting)
+            stats["licensed_users"] = await sync_licensed_users(
+                session, graph, config, granting
+            )
             stats["license_counts"] = await sync_license_counts(
-                session, graph, config, now
+                session, graph, config, now, granting
             )
             stats["prompts"] = await sync_prompts(session, graph, config, now)
-            stats["entra_users"] = await sync_entra_users(session, graph, config)
+            stats["entra_users"] = await sync_entra_users(
+                session, graph, config, granting
+            )
+            # Real data has arrived, so the demo persona the password admin was
+            # borrowing is now misleading — it would keep showing a fictional
+            # person's activity as "your" usage. Retire it here rather than
+            # relying on someone remembering to press Clear demo data.
+            cfg_row = await session.get(AppConfig, 1)
+            if cfg_row is not None:
+                cfg_row.demo_persona_user_id = None
             job.status = "success"
             job.finished_at = datetime.now(timezone.utc)
             job.stats = stats
@@ -419,6 +479,7 @@ async def test_graph_connection(config: AppConfig) -> dict[str, Any]:
         "subscribed_skus": False,
         "directory_read": False,
         "copilot_licensed_users": None,
+        "copilot_skus": [],
         "detail": None,
     }
     try:
@@ -429,11 +490,18 @@ async def test_graph_connection(config: AppConfig) -> dict[str, Any]:
     try:
         await graph.acquire_token()
         result["token_acquired"] = True
-        await graph.get_subscribed_skus()
+        skus = await graph.get_subscribed_skus()
         result["subscribed_skus"] = True
+        granting = copilot_granting_skus(
+            skus, override=list(config.copilot_sku_ids or [])
+        )
+        # Report every subscription with whether it counts, so an administrator
+        # can see a SKU was considered and rejected rather than overlooked.
+        result["copilot_skus"] = describe_granting_skus(skus, granting)
         count = 0
-        async for _ in graph.iter_licensed_users(list(config.copilot_sku_ids)):
-            count += 1
+        async for user in graph.iter_licensed_users(sorted(granting)):
+            if has_copilot_license(user, granting):
+                count += 1
         result["copilot_licensed_users"] = count
         result["directory_read"] = True
         result["ok"] = True

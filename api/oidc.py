@@ -14,9 +14,10 @@ MSAL performs the security-critical validation (PKCE, ``state``, ``nonce``,
 issuer, audience and signature) inside ``acquire_token_by_auth_code_flow`` — we
 deliberately do not hand-roll any of it.
 
-Optionally checks membership of a configured Entra security group (via app-only
-Graph ``checkMemberGroups``). SSO users are viewers; administration stays behind
-the password gate.
+Optionally checks membership of configured Entra security groups (via app-only
+Graph ``checkMemberGroups``). SSO users are issued as viewers; whether they also
+administer is decided per request from the admin group, not from the token —
+see :func:`api.auth.is_admin`.
 """
 from __future__ import annotations
 
@@ -48,9 +49,13 @@ STATE_TTL_SECONDS = 600
 
 CALLBACK_PATH = "/auth/oidc/callback"
 
-# Claim names that carry the user's object id / display name.
+# Claim names that carry the user's object id and sign-in name (the UPN).
 _OID_CLAIMS = ("oid", "http://schemas.microsoft.com/identity/claims/objectidentifier")
 _NAME_CLAIMS = ("preferred_username", "upn", "email", "name")
+# The human-readable display name, which is a different claim from the UPN.
+# Kept separate so the UI can show "Ada Lovelace" above "ada@contoso.com"
+# rather than only the identifier.
+_DISPLAY_NAME_CLAIMS = ("name",)
 
 # Cache group-membership decisions briefly so we don't call Graph per request.
 _GROUP_TTL_SECONDS = 300
@@ -68,6 +73,8 @@ class Principal:
     object_id: str
     name: str
     groups: list[str] = field(default_factory=list)
+    # None when Entra sent no ``name`` claim; callers fall back to ``name``.
+    display_name: str | None = None
 
 
 class OidcNotConfigured(RuntimeError):
@@ -211,10 +218,19 @@ async def complete_flow(
     if not oid or not name:
         raise ValueError("Entra did not return an identifiable user.")
 
+    display_name = next(
+        (claims[c] for c in _DISPLAY_NAME_CLAIMS if claims.get(c)), None
+    )
+
     groups = claims.get("groups") or []
     if isinstance(groups, str):
         groups = [groups]
-    return Principal(object_id=str(oid), name=str(name), groups=[str(g) for g in groups])
+    return Principal(
+        object_id=str(oid),
+        name=str(name),
+        groups=[str(g) for g in groups],
+        display_name=str(display_name) if display_name else None,
+    )
 
 
 async def is_group_member(

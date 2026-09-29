@@ -130,7 +130,8 @@ The client secret is encrypted at rest with the Fernet key before it touches the
 ## Entra single sign-on (optional)
 
 The dashboard is protected by the admin password by default. Entra sign-in adds read-only viewer
-access with work accounts, while administration stays behind the password.
+access with work accounts, and — if you name an **admin group** in Settings — administrator access
+for that group's members, so more than one person can administer without sharing a password.
 
 Sign-in is performed by the app itself rather than by the hosting platform, so it behaves the same
 on Azure Container Apps, Docker on any host, or Kubernetes. Nothing needs configuring on the

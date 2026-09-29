@@ -12,6 +12,7 @@ from worker.backfill import adaptive_concurrency, iter_windows, run_backfill
 
 NOW = datetime(2026, 7, 29, tzinfo=timezone.utc)
 SKU = "639dec6b-bb19-468b-871c-c5c441c4b0cb"
+COPILOT_PLAN = "3f30311c-6b1e-48a4-ab79-725b469da960"
 
 
 def test_adaptive_concurrency():
@@ -137,7 +138,16 @@ class FakeGraphWithUsers(FakeGraph):
 
     async def iter_licensed_users(self, sku_ids):
         for uid in self._licensed:
-            yield {"id": uid}
+            # Real Graph returns the assignments; the licence check reads them.
+            yield {
+                "id": uid,
+                "assignedLicenses": [
+                    {"skuId": sku, "disabledPlans": []} for sku in (sku_ids or [SKU])
+                ],
+            }
+
+    async def get_subscribed_skus(self):
+        return [{"skuId": SKU, "servicePlans": [{"servicePlanId": COPILOT_PLAN}]}]
 
 
 @pytest.mark.asyncio

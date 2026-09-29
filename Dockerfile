@@ -13,10 +13,13 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python deps first for better layer caching.
+# ⚠ This list is a duplicate of [project].dependencies in pyproject.toml, and
+# it is the one that ships. Change one, change the other — a drift here is not
+# caught by the tests, because the tests install from pyproject.
 COPY pyproject.toml ./
 RUN pip install --upgrade pip \
     && pip install \
-        "fastapi>=0.115" "uvicorn[standard]>=0.30" "sqlalchemy>=2.0" "alembic>=1.13" \
+        "fastapi>=0.115" "uvicorn[standard]>=0.30" "sqlalchemy[asyncio]>=2.0" "alembic>=1.13" \
         "httpx>=0.27" "msal>=1.30" "apscheduler>=3.10" "pydantic>=2.7" \
         "pydantic-settings>=2.3" "psycopg[binary]>=3.2" "cryptography>=42" \
         "pyjwt>=2.9" "bcrypt>=4.1" "python-multipart>=0.0.9"

@@ -177,15 +177,6 @@ def transform_interaction(
     }
 
 
-def has_configured_sku(user: dict[str, Any], sku_ids: list[str]) -> bool:
-    """True when the user holds any of the configured Copilot SKUs."""
-    wanted = set(sku_ids)
-    assigned = {
-        lic.get("skuId") for lic in (user.get("assignedLicenses") or [])
-    }
-    return bool(wanted & assigned)
-
-
 def is_included_entra_user(user: dict[str, Any]) -> bool:
     """Apply the directory-user inclusion filter used at ingest.
 

@@ -6,6 +6,8 @@ export interface AppConfig {
   report_access_group_id: string | null;
   /** Members may see organisation-wide data. Null = open to all signed-in users. */
   org_view_group_id: string | null;
+  /** Members get admin on Entra sign-in. Null = nobody does (fails closed). */
+  admin_group_id: string | null;
   backfill_days: number;
   schedule_cron: string | null;
   schedule_interval_hours: number;
@@ -14,10 +16,20 @@ export interface AppConfig {
   updated_by: string | null;
 }
 
+/** A tenant subscription, and whether it grants Copilot. */
+export interface CopilotSku {
+  sku_id: string;
+  name: string;
+  grants_copilot: boolean;
+  seats: number;
+  assigned: number;
+}
+
 export interface TestConnectionResult {
   ok: boolean;
   token_acquired: boolean;
   subscribed_skus: boolean;
+  copilot_skus?: CopilotSku[];
   directory_read: boolean;
   copilot_licensed_users: number | null;
   detail: string | null;
@@ -339,3 +351,19 @@ export interface UserSyncStatus {
   updated_at: string | null;
 }
 
+
+/** One row of the tenant users listing (GET /metrics/users). */
+export interface DirectoryUser {
+  user_id: string;
+  user_principal_name: string | null;
+  display_name: string | null;
+  job_title: string | null;
+  department: string | null;
+  company_name: string | null;
+  office_location: string | null;
+  country: string | null;
+  manager_name: string | null;
+  user_type: string | null;
+  has_copilot_license: boolean;
+  prompts: number;
+}

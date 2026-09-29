@@ -2,14 +2,19 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
+import AppBars, {
+  AppBarSortToggle,
+  type AppBarSort,
+  sortAppBars,
+} from "../components/AppBars";
 import ChartCard from "../components/ChartCard";
 import KpiCard from "../components/KpiCard";
 
 interface Summary {
   prompts: number;
   conversations: number;
-  active_days?: number;
-  apps?: number;
+  active_days: number;
+  avg_prompts_per_conversation?: number;
 }
 interface AppRow {
   app_name: string | null;
@@ -32,6 +37,7 @@ export default function PersonalPage() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [apps, setApps] = useState<AppRow[]>([]);
   const [comparison, setComparison] = useState<Comparison | null>(null);
+  const [appSort, setAppSort] = useState<AppBarSort>("value");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -64,10 +70,21 @@ export default function PersonalPage() {
   }
 
   const hasData = !!summary && summary.prompts > 0;
+  const activeDays = summary?.active_days ?? 0;
+  const perConversation =
+    summary && summary.conversations > 0
+      ? (summary.prompts / summary.conversations).toFixed(1)
+      : null;
+  const topApp =
+    [...apps].sort((a, b) => b.prompts - a.prompts)[0]?.app_name ?? null;
+  const appBars = sortAppBars(
+    apps.map((a) => ({ name: a.app_name, value: a.prompts })),
+    appSort,
+  );
 
   return (
     <div>
-      <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">
+      <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
         Your Copilot usage
       </h1>
       <p className="mb-5 mt-1 text-sm text-slate-500 dark:text-slate-400">
@@ -77,7 +94,9 @@ export default function PersonalPage() {
       <OrgViewBanner canViewOrg={user?.can_view_org ?? false} />
 
       {error && (
-        <div className="card mb-5 text-sm text-amber-700 dark:text-amber-300">{error}</div>
+        <div className="card mb-5 p-5 text-sm text-amber-700 dark:text-amber-300">
+          {error}
+        </div>
       )}
 
       {!hasData && !error ? (
@@ -96,56 +115,55 @@ export default function PersonalPage() {
       ) : (
         <>
           <div className="mb-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <KpiCard label="Prompts sent" value={summary?.prompts ?? 0} />
-            <KpiCard label="Conversations" value={summary?.conversations ?? 0} />
-            <KpiCard label="Apps used" value={apps.length} />
+            <KpiCard
+              label="Prompts sent"
+              value={summary?.prompts ?? 0}
+              hint={
+                activeDays
+                  ? `Over ${activeDays} active ${activeDays === 1 ? "day" : "days"}`
+                  : "No activity recorded yet"
+              }
+            />
+            <KpiCard
+              label="Conversations"
+              value={summary?.conversations ?? 0}
+              hint={
+                perConversation
+                  ? `${perConversation} prompts each on average`
+                  : "Distinct Copilot threads"
+              }
+            />
+            <KpiCard
+              label="Apps used"
+              value={apps.length}
+              hint={topApp ? `Most in ${topApp}` : "Where you've used Copilot"}
+            />
             <KpiCard
               label="Organisation median"
               value={comparison?.org_median_prompts ?? 0}
               hint={
                 comparison
-                  ? comparison.above_median
-                    ? "You're above average"
-                    : "You're below average"
-                  : undefined
+                  ? `${comparison.above_median ? "●" : "○"} You're ${
+                      comparison.above_median ? "above" : "below"
+                    } average of ${comparison.people_counted} people`
+                  : "Not enough data to compare"
               }
             />
           </div>
 
-          <ChartCard title="Where you use Copilot">
-            {apps.length === 0 ? (
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                No app breakdown available yet.
-              </p>
-            ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-200 dark:border-slate-700">
-                    <th className="px-3 py-2 text-left font-medium text-slate-500 dark:text-slate-400">
-                      App
-                    </th>
-                    <th className="px-3 py-2 text-right font-medium text-slate-500 dark:text-slate-400">
-                      Prompts
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {apps.map((a) => (
-                    <tr
-                      key={a.app_name ?? "unknown"}
-                      className="border-b border-slate-100 last:border-0 dark:border-slate-800"
-                    >
-                      <td className="px-3 py-2 text-slate-700 dark:text-slate-300">
-                        {a.app_name ?? "Unknown"}
-                      </td>
-                      <td className="px-3 py-2 text-right tabular-nums text-slate-900 dark:text-slate-100">
-                        {a.prompts}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+          <ChartCard
+            title="Where you use Copilot"
+            subtitle="Prompts by app"
+            action={
+              apps.length > 1 ? (
+                <AppBarSortToggle sort={appSort} onChange={setAppSort} />
+              ) : undefined
+            }
+          >
+            <AppBars
+              rows={appBars}
+              emptyMessage="No app breakdown available yet."
+            />
           </ChartCard>
         </>
       )}
@@ -160,7 +178,7 @@ export default function PersonalPage() {
  */
 function OrgViewBanner({ canViewOrg }: { canViewOrg: boolean }) {
   return (
-    <div className="card mb-5 flex flex-wrap items-center justify-between gap-4">
+    <div className="card mb-5 flex flex-wrap items-center justify-between gap-4 p-5">
       {canViewOrg ? (
         <>
           <div>

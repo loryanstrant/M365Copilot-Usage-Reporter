@@ -31,7 +31,11 @@ export default function Layout({ children }: { children: ReactNode }) {
       <SvgDefs />
       <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-white dark:border-slate-700 dark:bg-slate-800">
         <div className="flex items-center gap-3 px-5 py-5">
-          <img src="/app-logo.png" alt="Copilot" className="h-8 w-8 shrink-0" />
+          <img
+            src="/app-logo.png"
+            alt="Microsoft 365 Copilot"
+            className="h-9 w-9 shrink-0 rounded-lg object-contain"
+          />
           <div>
             <div className="text-sm font-semibold text-brand-600 dark:text-brand-500">
               M365 Copilot
@@ -78,15 +82,28 @@ export default function Layout({ children }: { children: ReactNode }) {
               <NavLink to="/licenses" className={navClass}>
                 Licenses
               </NavLink>
+              <NavLink to="/users" className={navClass}>
+                Tenant users
+              </NavLink>
+            </>
+          )}
+
+          {user?.role === "admin" && (
+            <>
+              <NavSectionLabel>Administration</NavSectionLabel>
+              <NavLink to="/settings" className={navClass}>
+                Settings
+              </NavLink>
+              <NavLink to="/backfill" className={navClass}>
+                Backfill
+              </NavLink>
             </>
           )}
 
           <NavSectionLabel>Help</NavSectionLabel>
-          {user?.role === "admin" && (
-            <NavLink to="/settings" className={navClass}>
-              Settings
-            </NavLink>
-          )}
+          <NavLink to="/help" className={navClass}>
+            Setup guide
+          </NavLink>
           <NavLink to="/about" className={navClass}>
             About
           </NavLink>
@@ -100,10 +117,28 @@ export default function Layout({ children }: { children: ReactNode }) {
             <span aria-hidden>{theme === "dark" ? "🌙" : "☀️"}</span>
           </button>
           <div>
-            <div className="font-medium text-slate-800 dark:text-slate-100">
-              {user?.username}
+            <div
+              className="truncate font-medium text-slate-800 dark:text-slate-100"
+              title={user?.display_name ?? user?.upn ?? user?.username}
+            >
+              {user?.display_name ?? user?.upn ?? user?.username}
             </div>
-            <div className="mb-3 text-xs uppercase tracking-wide text-slate-400">
+            {/* The identifier beneath the name. Prefer the UPN — the account
+                name is "admin" for the password gate, which says nothing about
+                who is on screen. Hidden when it would just repeat the name. */}
+            {(() => {
+              const name = user?.display_name ?? user?.upn ?? user?.username;
+              const identifier = user?.upn ?? user?.username;
+              return identifier && identifier !== name ? (
+                <div
+                  className="truncate text-xs text-slate-400 dark:text-slate-500"
+                  title={identifier}
+                >
+                  {identifier}
+                </div>
+              ) : null;
+            })()}
+            <div className="mb-3 mt-1 text-xs uppercase tracking-wide text-slate-400">
               {user?.role}
             </div>
             <button

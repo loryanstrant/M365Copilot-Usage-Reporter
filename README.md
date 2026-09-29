@@ -39,11 +39,37 @@ Top departments, offices, and managers, plus the most active users by prompts an
 
 ![Leaderboards](docs/screenshots/leaderboards.png)
 
+### Tenant users
+
+Everyone imported from your directory, with whether they hold a Copilot licence and how many
+prompts they have actually sent — so "licensed but never uses it" is one sort, not two exports
+matched by hand. Every column filters.
+
+![Tenant users](docs/screenshots/tenant-users.png)
+
+### Your Copilot usage
+
+What each person sees of their own activity: how much they have used Copilot, how that compares
+with the organisation median, and which apps they use it in.
+
+![Your Copilot usage](docs/screenshots/personal.png)
+
+### Settings
+
+Graph connection, refresh frequency, and the Entra security groups that govern who can see the
+report, who can see organisation-wide data, and who administers it.
+
+![Settings](docs/screenshots/settings.png)
+
 ### Dark mode
 
 Every page supports a light and dark theme.
 
 ![Overview in dark mode](docs/screenshots/overview-dark.png)
+
+![Your Copilot usage in dark mode](docs/screenshots/personal-dark.png)
+
+> These are desktop dashboards. They are built for a laptop or monitor, not a phone.
 
 ## Deploy to Azure (one click)
 
@@ -82,8 +108,9 @@ run. Nothing is ever seeded or wiped automatically.
 ### Enabling Entra ID single sign-on (optional)
 
 By default the dashboard is protected by the single admin password. You can additionally let
-colleagues sign in with their **work account** (read-only viewer role) — administration stays
-behind the password.
+colleagues sign in with their **work account** (read-only viewer role), and optionally name a
+security group whose members become administrators when they sign in — so more than one person
+can administer the report without anyone sharing a password.
 
 Sign-in is performed by the app itself, so it works the same wherever you run it: Azure, Docker
 on a NAS, Kubernetes, anywhere. There is nothing to configure on the hosting platform.
@@ -95,8 +122,17 @@ second set of credentials to manage:
 2. Copy the **redirect URI** shown there.
 3. In the Entra portal, open your app registration → **Authentication → Add a platform → Web**,
    and paste that redirect URI.
-4. Optionally set a **report access group** in Settings to restrict who can view the dashboard. If
-   you do, add a **groups** claim under **Token configuration** on the app registration.
+4. Optionally set the security groups in Settings. There are three, all optional and all taking
+   a group **object ID**:
+   - **Report access group** — restricts who can open the report at all.
+   - **Organisation view group** — members see organisation-wide data; everyone else sees only
+     their own activity. Leave blank and any signed-in user can see organisation data.
+   - **Admin group** — members become administrators. Leave blank and **nobody** gets admin this
+     way; the local admin account is unaffected either way, and is how you set this in the first
+     place.
+
+   If you set any of them, add a **groups** claim under **Token configuration** on the app
+   registration.
 
 The sign-in page then shows a **"Sign in with Microsoft"** button.
 
@@ -131,12 +167,22 @@ Full details and screenshots: [`docs/deploy.md`](docs/deploy.md#entra-single-sig
 - **Leaderboards** — top departments, offices, managers and users.
 - **Laggards** — licensed users with no activity in the window: who to coach first.
 - **Coaching pairs** — matches low-usage users with a high-usage peer in the same team.
-- **Licences** — enabled, allocated and available over time.
+- **Licences** — enabled, allocated and available over time. A person counts as licensed when
+  they hold any subscription containing the *Microsoft Copilot with Graph-grounded chat* service
+  plan **and** that plan is switched on for them — so Microsoft 365 Copilot, **Microsoft 365 E7**,
+  Copilot for Sales and any future Copilot subscription are all counted with nothing to
+  configure, and someone holding a bundle with Copilot disabled is not.
+- **Tenant users** — the imported directory with each person's licence state and prompt count,
+  filterable on every column.
 - **Settings (admin)** — Graph config (secret write-only, Fernet-encrypted), a guided
   app-registration wizard, test connection, run now, demo data, and a resumable **backfill** with
   live progress.
 - **Entra single sign-on (optional)** — colleagues view the report with their work account
-  (read-only), optionally gated to an Entra security group.
+  (read-only), optionally gated to an Entra security group. Naming an **admin group** gives its
+  members administrator rights when they sign in, so administering the report no longer means
+  sharing one password. Membership is re-checked on every request, so removing someone takes
+  effect in minutes rather than at their next sign-in.
+- Signed-in people are shown by **name**, not just their user principal name.
 - Global date-range and app **filters**, **CSV export**, and a **light/dark** theme throughout.
 
 ## Prerequisites & permissions
