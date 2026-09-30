@@ -96,6 +96,35 @@ populates departments sparsely, most people will see two series rather than
 three. That is the correct outcome. The alternative is a report that quietly
 discloses individuals' usage to their colleagues.
 
+**Why the team is withheld is a third state, not an absence.** The endpoint
+returns `team_state` — `shown`, `too_small` or `unknown` — and the page reads
+it rather than inferring the reason from a peer count of zero. Those two
+withheld cases both have zero peers and are not the same situation:
+
+| `team_state` | Means | What the page says |
+|---|---|---|
+| `shown` | The grouping holds at least `min_team_peers` others | Three series |
+| `too_small` | A grouping **is** on file and holds too few | Names it, and says the floor |
+| `unknown` | The record has no department and no manager | Says so, and that Entra can fix it |
+
+A department of one is `too_small`, not `unknown`. Telling somebody whose
+department is on file that we do not know which team they are in is a false
+statement about their own data, and it points an administrator at the wrong
+problem — the fixable case is the one where nobody has populated a department.
+The distinction has to be tracked at the source: whether a grouping was
+*identified* is separate from whether it *held anybody*.
+
+Two details that follow from the same reasoning:
+
+- **The floor is returned as `min_team_peers`** rather than hardcoded in the
+  page, so the sentence cannot drift away from the rule the endpoint enforces.
+- **The figure is withheld at the endpoint**, not hidden by the page. A number
+  that reaches the browser has been disclosed whatever is done with it
+  afterwards.
+- **The manager fallback never makes the group smaller.** Replacing a
+  department of three with a manager group of one loses the larger grouping and
+  gets no closer to the floor; fall back only when it does better.
+
 **Job kinds.** `job_runs.job_name` is not a tidy enum, and — this is the part
 easy to get wrong — **the set differs per repo**. Usage Reporter writes `daily`,
 `manual`, `users` and `backfill`, with `scheduled` also present in production
@@ -226,7 +255,11 @@ Filterable by **environment**, **creator** and **agent**.
 - A person whose team has fewer than five other people in it sees two series,
   not three — the team row is omitted rather than drawn from a group small
   enough to identify someone.
-- A person in a department of one is a case of the above, and sees no error.
+- A person in a department of one is a case of the above, and sees no error —
+  and is told their team is **too small**, not that their team is unknown.
+- A person with no department and no manager is told their team is unknown, and
+  what would fill it in.
+- The stated floor comes from the response, not from a constant in the page.
 - The comparison never exposes another individual's figures — aggregates only,
   as the existing personal-view rule requires.
 - All three series cover the same period, and the panel names the period.

@@ -91,6 +91,63 @@ async def test_a_department_of_one_is_not_an_error():
     assert body["organisation"]["prompts"] == 3
 
 
+# --------------------------------------------------------------------------- #
+# Why the team is withheld, which is not the same question as whether it is
+# --------------------------------------------------------------------------- #
+@pytest.mark.asyncio
+async def test_a_department_of_one_reports_too_small_not_unknown():
+    """The bug this pins: both cases have zero peers, and inferring the reason
+    from that count tells somebody whose department is on file that we do not
+    know which team they are in. That is untrue about their own data, and it
+    sends an administrator looking for the wrong problem."""
+    await _person(ME, "Legal", 7)
+    for i in range(6):
+        await _person(f"o{i}", "Sales", 3)
+    body = await _compare()
+    assert body["team_state"] == "too_small"
+    assert body["team_label"] == "Legal"
+    assert body["team_size"] == 0
+
+
+@pytest.mark.asyncio
+async def test_no_department_and_no_manager_reports_unknown():
+    await _person(ME, None, 7)
+    for i in range(6):
+        await _person(f"o{i}", "Sales", 3)
+    body = await _compare()
+    assert body["team_state"] == "unknown"
+    assert body["team_label"] is None
+
+
+@pytest.mark.asyncio
+async def test_a_shown_team_says_so():
+    await _person(ME, "Finance", 10)
+    for i in range(MIN_TEAM_PEERS):
+        await _person(f"p{i}", "Finance", 4)
+    body = await _compare()
+    assert body["team_state"] == "shown"
+
+
+@pytest.mark.asyncio
+async def test_the_manager_fallback_never_makes_the_group_smaller():
+    """A department of three replaced by a manager group of one loses the larger
+    grouping and gets no closer to the floor."""
+    await _person(ME, "Finance", 10, manager="mgr-1")
+    for i in range(3):
+        await _person(f"d{i}", "Finance", 4, manager="mgr-2")
+    body = await _compare()
+    assert body["team_size"] == 3
+    assert body["team_label"] == "Finance"
+    assert body["team_state"] == "too_small"
+
+
+@pytest.mark.asyncio
+async def test_the_floor_is_reported_so_the_page_need_not_hardcode_it():
+    await _person(ME, "Legal", 1)
+    body = await _compare()
+    assert body["min_team_peers"] == MIN_TEAM_PEERS
+
+
 @pytest.mark.asyncio
 async def test_no_department_falls_back_to_the_manager_group():
     await _person(ME, None, 10, manager="mgr-1")

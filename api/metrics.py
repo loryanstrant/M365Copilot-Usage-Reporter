@@ -243,6 +243,11 @@ async def peer_comparison(
 
     All three series come from one pass over the same filtered window, so they
     cannot silently disagree about which period they describe.
+
+    ``team_state`` is one of ``shown``, ``too_small`` or ``unknown``, stated
+    explicitly rather than left for the caller to infer from a null — the two
+    withheld cases have different causes and only one of them is fixable by an
+    administrator.
     """
     f = filters or MetricFilters()
     org_filters = deepcopy(f)
@@ -274,25 +279,42 @@ async def peer_comparison(
     mine = measures(me, user_id)
 
     # Who counts as "my team".
+    #
+    # Two things are tracked separately here, and conflating them makes the page
+    # say something untrue about somebody's own data. Whether a grouping was
+    # **identified** (their record names a department) is not the same as
+    # whether that grouping **held anybody else**. A department of one is on
+    # file and too small to show; a record with no department at all is
+    # unknown. Both end up with zero peers.
     peers: list[dict[str, Any]] = []
     team_label: str | None = None
+    team_identified = False
     if me:
         dept = (me.get("department") or "").strip()
         if dept:
+            team_identified = True
+            team_label = dept
             peers = [
                 r for r in rows
                 if (r.get("department") or "").strip() == dept
                 and r.get("user_id") != user_id
             ]
-            team_label = dept
         if len(peers) < MIN_TEAM_PEERS:
             mgr = me.get("manager_id")
             if mgr:
-                peers = [
+                mgr_peers = [
                     r for r in rows
                     if r.get("manager_id") == mgr and r.get("user_id") != user_id
                 ]
-                team_label = "your manager's team" if peers else None
+                # Only fall back if it does better. Replacing a department of
+                # three with a manager group of one loses the larger grouping
+                # and gets no closer to the floor.
+                if len(mgr_peers) > len(peers):
+                    peers = mgr_peers
+                    team_label = "your manager's team"
+                if not team_identified:
+                    team_identified = True
+                    team_label = team_label or "your manager's team"
 
     def mean(values: list[int]) -> int:
         return round(sum(values) / len(values)) if values else 0
@@ -344,6 +366,11 @@ async def peer_comparison(
         "team": None,
         "team_label": None,
         "team_size": len(peers),
+        # The floor is the server's to own. Returned so the page can say
+        # "only shown from five" without hardcoding a number it does not
+        # enforce and cannot be trusted to keep in step.
+        "min_team_peers": MIN_TEAM_PEERS,
+        "team_state": "unknown",
     }
 
     if len(peers) >= MIN_TEAM_PEERS:
@@ -353,6 +380,11 @@ async def peer_comparison(
             "apps": mean([apps_by_id.get(r.get("user_id"), 0) for r in peers]),
         }
         result["team_label"] = team_label
+        result["team_state"] = "shown"
+    elif team_identified:
+        # Named, so say so — the label is not a disclosure, the figure is.
+        result["team_label"] = team_label
+        result["team_state"] = "too_small"
     return result
 
 

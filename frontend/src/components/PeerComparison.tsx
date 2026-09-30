@@ -16,6 +16,10 @@ export interface PeerComparisonData {
   percentile: Partial<Record<keyof PeerSeries, number | null>>;
   period_from: string | null;
   period_to: string | null;
+  /** Why the team series is or is not drawn. Stated, never inferred. */
+  team_state: "shown" | "too_small" | "unknown";
+  /** The disclosure floor, owned and enforced by the server. */
+  min_team_peers: number;
 }
 
 export interface PeerMeasure {
@@ -40,6 +44,19 @@ function ordinal(n: number): string {
   return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`;
 }
 
+function withheldNote(data: PeerComparisonData): string {
+  if (data.team_state === "too_small") {
+    const who =
+      data.team_size === 0
+        ? `you are the only person on file in ${data.team_label ?? "your team"}`
+        : `${data.team_label ?? "your team"} has ${data.team_size} other ${
+            data.team_size === 1 ? "person" : "people"
+          } on file`;
+    return `No team comparison — ${who}, and a team average is only shown from ${data.min_team_peers}. Below that, the average and your own figure together would give an individual's number away.`;
+  }
+  return "No team comparison — we don't know which team you're in, because your directory record has no department and no manager. Populating either in Entra will fill this in.";
+}
+
 /**
  * You, your team and your organisation on the same measures.
  *
@@ -49,6 +66,14 @@ function ordinal(n: number): string {
  * - The team row is simply **absent** when the server withholds it, never a
  *   zero bar. An empty bar reads as "you are miles ahead of your team" when it
  *   means "that team is too small to show without identifying someone".
+ * - The two withheld cases are told apart by `team_state` rather than guessed
+ *   at from a zero peer count, because a department of one and a record with
+ *   no department both have no peers and are not the same situation. Saying
+ *   "we don't know which team you're in" to somebody whose department is on
+ *   file is a false statement about their own data, and it points an
+ *   administrator at the wrong problem.
+ * - The floor is read from the response, so the sentence cannot drift away
+ *   from the rule the endpoint actually applies.
  * - The period is named, because three series over different windows would be
  *   arithmetically fine and completely misleading.
  * - The percentile says which population it is measured against.
@@ -119,16 +144,7 @@ export default function PeerComparison({
           );
         })}
       </div>
-      {!hasTeam && (
-        <p className="mt-4 text-xs text-slate-400 dark:text-slate-500">
-          No team comparison:{" "}
-          {data.team_size > 0
-            ? `your team is too small to show without identifying someone (${data.team_size} other ${
-                data.team_size === 1 ? "person" : "people"
-              }).`
-            : "we don't know which team you're in — your directory record has no department or manager."}
-        </p>
-      )}
+      {!hasTeam && <p className="mt-4 text-xs text-slate-400 dark:text-slate-500">{withheldNote(data)}</p>}
     </ChartCard>
   );
 }
