@@ -47,12 +47,26 @@ matched by hand. Every column filters.
 
 ![Tenant users](docs/screenshots/tenant-users.png)
 
-### Your Copilot usage
+### Your usage
 
 What each person sees of their own activity: how much they have used Copilot, how that compares
 with the organisation median, and which apps they use it in.
 
-![Your Copilot usage](docs/screenshots/personal.png)
+![Your usage](docs/screenshots/personal.png)
+
+### Scan history
+
+Every collection this report has run, newest first, under **Administration** —
+what kind it was, when it started, how long it took, what it wrote, and whether
+it succeeded, with a failed run showing its error. Status is a shape plus a word
+(● Succeeded · ◐ In progress · ○ Failed), never colour alone, and a kind the app
+does not recognise is shown as itself rather than filtered out: a run that
+happened and is not listed is worse than one labelled awkwardly.
+
+This is what `job_runs` has recorded since the first release and nothing ever
+displayed.
+
+![Scan history](docs/screenshots/scan-history.png)
 
 ### Settings
 
@@ -67,7 +81,8 @@ Every page supports a light and dark theme.
 
 ![Overview in dark mode](docs/screenshots/overview-dark.png)
 
-![Your Copilot usage in dark mode](docs/screenshots/personal-dark.png)
+![Your usage in dark mode](docs/screenshots/personal-dark.png)
+![Scan history in dark mode](docs/screenshots/scan-history-dark.png)
 
 > These are desktop dashboards. They are built for a laptop or monitor, not a phone.
 
