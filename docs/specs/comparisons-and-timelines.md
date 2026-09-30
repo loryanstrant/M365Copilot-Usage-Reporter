@@ -80,6 +80,22 @@ organisation**, not against your team, and the panel says so. A team of four
 makes team-relative percentiles meaningless — you are in the top 25% by
 arithmetic rather than by doing anything.
 
+**Minimum team size.** A team series is only drawn when the grouping contains
+**at least five people other than the viewer**. Below that it is omitted,
+exactly as an unknown team is.
+
+This is not a presentation preference, it is a disclosure rule. "Aggregates
+only" stops being true at small n: in a team of two, the team average and your
+own figure together give the other person's exact number, and anyone can do
+that arithmetic in their head. The threshold applies to whichever grouping is
+in use, department or manager — falling back from a department of one to a
+manager group of two fixes nothing.
+
+A consequence worth stating plainly: in a small tenant, or a tenant that
+populates departments sparsely, most people will see two series rather than
+three. That is the correct outcome. The alternative is a report that quietly
+discloses individuals' usage to their colleagues.
+
 **Job kinds.** `job_runs.job_name` is not a tidy three-value enum. The code
 writes `daily`, `manual`, `users` and `backfill`, and rows already in
 production also carry `scheduled`. Scan history must map every one of these to
@@ -138,6 +154,13 @@ Needs `User.Read.All` on that app registration, which is a consent step. A
 creator who cannot be resolved (left the company, a service principal) is kept
 and shown by UPN — dropping them would silently lose their agents.
 
+Because the lookup is scoped to creators, **a viewer who has never created an
+agent has no directory row and therefore no team**. They see their own figures
+and the organisation's, and no team series — the same two-series outcome as an
+unknown team, reached for a different reason. Widening the sync to resolve
+viewers as well would mean enumerating people who have nothing to do with the
+data, which is the tenant-wide sync this was deliberately scoped away from.
+
 ### Checking a collection actually ran
 
 **Scan history**, under `ADMINISTRATION` in all four: every run with what kind
@@ -183,8 +206,10 @@ Filterable by **environment**, **creator** and **agent**.
   bar and no zero.
 - Prompt Analyser's chart compares against the caller's actual team; its
   organisation series is labelled as the organisation.
-- A person in a department of one sees their team series equal to their own
-  figure, not an error.
+- A person whose team has fewer than five other people in it sees two series,
+  not three — the team row is omitted rather than drawn from a group small
+  enough to identify someone.
+- A person in a department of one is a case of the above, and sees no error.
 - The comparison never exposes another individual's figures — aggregates only,
   as the existing personal-view rule requires.
 - All three series cover the same period, and the panel names the period.
