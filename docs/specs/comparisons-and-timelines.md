@@ -65,6 +65,45 @@ Seven things, reported after living with the suite for a day.
 
 ---
 
+## Definitions
+
+Pinned here because each was left open on the first draft, and four
+implementations of an open question are four different answers.
+
+**Comparison period.** All three series use the **same window as the rest of
+the personal page** — the period the page's filters resolve to, defaulting to
+the last 30 days. Comparing your 30 days against a team's all-time total would
+flatter the team by however long it has existed.
+
+**Percentile population.** Your percentile is stated **against the
+organisation**, not against your team, and the panel says so. A team of four
+makes team-relative percentiles meaningless — you are in the top 25% by
+arithmetic rather than by doing anything.
+
+**Job kinds.** `job_runs.job_name` is not a tidy three-value enum. The code
+writes `daily`, `manual`, `users` and `backfill`, and rows already in
+production also carry `scheduled`. Scan history must map every one of these to
+a readable label and must **not** silently drop a value it does not recognise —
+an unmapped kind renders as its raw value rather than vanishing, because a run
+that happened and is not listed is worse than one labelled awkwardly.
+
+**Run statuses.** Six values exist across the four codebases: `running`,
+`preparing`, `success`, `completed`, `failed`, `cancelled`. They map to three
+indicators:
+
+| Indicator | Statuses | Word |
+|---|---|---|
+| `●` | `success`, `completed` | Succeeded |
+| `◐` | `running`, `preparing` | In progress |
+| `○` | `failed`, `cancelled` | Failed / Cancelled |
+
+`success` and `completed` mean the same thing and differ only by which module
+wrote the row. Normalising the vocabulary at the source is out of scope here;
+the display layer absorbs it, and this table is the single place that mapping
+is decided.
+
+---
+
 ## Flows
 
 ### Seeing how you compare
@@ -80,7 +119,9 @@ your team is".
 
 Measures per solution:
 
-- **Usage Reporter** — prompts, conversations, apps used
+- **Usage Reporter** — prompts, conversations, apps used. Note `by_user`
+  currently returns a prompt count only, so distinct-apps-per-person is new
+  aggregation rather than a column that already exists.
 - **Prompt Analyser** — the GCSE levers (the existing chart, correctly filtered)
 - **Cowork Reporter** — sessions, tools per session *(already built)*
 - **Agent Quality** — agents created, average score
@@ -100,8 +141,9 @@ and shown by UPN — dropping them would silently lose their agents.
 ### Checking a collection actually ran
 
 **Scan history**, under `ADMINISTRATION` in all four: every run with what kind
-it was (scheduled, manual, backfill), when it started, how long it took, what
-it wrote, and whether it succeeded. Failures show their error. This is what
+it was, when it started, how long it took, what it wrote, and whether it
+succeeded — using the kind and status vocabulary pinned in Definitions above,
+which is wider than it looks. Failures show their error. This is what
 `job_runs` has always recorded and nothing ever displayed.
 
 Agent Quality keeps its own scan runs here, which is the page's original
@@ -145,6 +187,8 @@ Filterable by **environment**, **creator** and **agent**.
   figure, not an error.
 - The comparison never exposes another individual's figures — aggregates only,
   as the existing personal-view rule requires.
+- All three series cover the same period, and the panel names the period.
+- The percentile states the population it is measured against.
 
 **Agent Quality directory**
 - Creators resolve to display name, department and manager.
@@ -156,6 +200,10 @@ Filterable by **environment**, **creator** and **agent**.
 - Shows scheduled, manual and backfill runs, newest first, with status as
   shape-plus-word (● ◐ ○), never colour alone.
 - A failed run shows its error.
+- Every `job_name` the code can write is listed, including `users` and
+  `scheduled`; an unrecognised kind renders as its raw value rather than
+  being filtered out.
+- Both `success` and `completed` render as Succeeded, not as two states.
 - Empty state explains that nothing has run yet and how to start one.
 
 **Timelines**
