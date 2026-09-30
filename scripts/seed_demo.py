@@ -397,6 +397,16 @@ def _demo_job_runs(now: datetime) -> list[JobRun]:
             stats={"entra_users": 40, "licensed_users": 31},
         )
     )
+    # One run still going, with no finished_at. Without it the "in progress"
+    # indicator is mapped but never rendered anywhere, so nobody finds out it
+    # is wrong until a real collection is mid-flight when someone looks.
+    runs.append(
+        JobRun(
+            job_name="manual",
+            status="running",
+            started_at=now - timedelta(minutes=2),
+        )
+    )
     return runs
 
 
