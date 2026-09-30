@@ -137,7 +137,7 @@ export default function UsersPage() {
           filterable
           // A tenant directory is thousands of rows; without this the column
           // headers and their filter boxes scroll out of reach on the way down.
-          maxBodyHeight={620}
+          maxBodyHeight="calc(100vh - 20rem)"
           emptyMessage="No users imported yet. Configure the app registration in Settings, then run a collection."
         />
       </ChartCard>
