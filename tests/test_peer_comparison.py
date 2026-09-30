@@ -142,6 +142,19 @@ async def test_the_manager_fallback_never_makes_the_group_smaller():
 
 
 @pytest.mark.asyncio
+async def test_a_manager_on_file_with_nobody_under_them_is_too_small():
+    """The mirror of a department of one, reached down the manager path. A
+    manager is on file, so the grouping is identified; it just holds nobody."""
+    await _person(ME, None, 7, manager="mgr-alone")
+    for i in range(6):
+        await _person(f"o{i}", "Sales", 3, manager="mgr-other")
+    body = await _compare()
+    assert body["team_state"] == "too_small"
+    assert body["team_size"] == 0
+    assert body["team"] is None
+
+
+@pytest.mark.asyncio
 async def test_the_floor_is_reported_so_the_page_need_not_hardcode_it():
     await _person(ME, "Legal", 1)
     body = await _compare()

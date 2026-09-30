@@ -21,7 +21,13 @@ LOGO_DIR = ROOT / "frontend" / "public" / "logos"
 def _seeded_apps() -> list[str]:
     block = re.search(r"_APPS\s*(?::[^=]+)?=\s*\[(.*?)\]", SEEDER.read_text(), re.S)
     assert block, "could not find the seeder's app list"
-    return re.findall(r'\(\s*"([^"]+)"', block.group(1))
+    apps = re.findall(r'\(\s*"([^"]+)"', block.group(1))
+    # Finding the block but parsing nothing out of it is the failure that hides:
+    # parametrise over an empty list and pytest collects zero cases, reports
+    # green, and checks nothing. Reformat the seeder into a list built by
+    # .append() and that is exactly what happens.
+    assert apps, "parsed the seeder's app list but found no apps in it"
+    return apps
 
 
 def _logo_map() -> dict[str, str]:
@@ -31,7 +37,9 @@ def _logo_map() -> dict[str, str]:
         re.S,
     )
     assert block, "could not find LOGO_FILE"
-    return dict(re.findall(r"(\w+):\s*\"([^\"]+)\"", block.group(1)))
+    mapping = dict(re.findall(r"(\w+):\s*\"([^\"]+)\"", block.group(1)))
+    assert mapping, "found LOGO_FILE but parsed no entries out of it"
+    return mapping
 
 
 def _key(name: str) -> str:
