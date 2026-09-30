@@ -283,7 +283,10 @@ async def backfill_coverage(session: AsyncSession = Depends(get_session)) -> dic
 
 
 @router.post("/seed-demo", response_model=IngestRunOut)
-async def seed_demo(days: int = 45, users: int = 40, reset: bool = True) -> IngestRunOut:
+# 90, not 40: with eight departments, forty people leaves teams of five or
+# fewer, and the peer comparison withholds a team that small — so the
+# feature the demo is meant to show would never appear.
+async def seed_demo(days: int = 45, users: int = 90, reset: bool = True) -> IngestRunOut:
     """Seed synthetic usage data so the dashboards render without live Graph.
 
     Explicit action only — nothing is ever seeded automatically on deploy.
@@ -317,6 +320,17 @@ async def clear_demo() -> IngestRunOut:
         status="cleared",
         detail="Demo data removed. Run now to load live data from Microsoft Graph.",
     )
+
+
+@router.get("/scan-history")
+async def scan_history(
+    limit: int = 100,
+    session: AsyncSession = Depends(get_session),
+) -> list[dict]:
+    """Every collection run, newest first. Admin-only: it carries error detail."""
+    from api import metrics
+
+    return await metrics.scan_history(session, limit=max(1, min(limit, 500)))
 
 
 @router.get("/status", response_model=StatusOut)

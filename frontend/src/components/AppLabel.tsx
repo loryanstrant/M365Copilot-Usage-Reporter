@@ -3,9 +3,19 @@
 // Names are normalised (lower-case, alphanumerics only) before lookup so minor
 // variations ("Microsoft Teams", "Copilot Chat") still resolve.
 
+// Graph reports some surfaces by an internal name rather than a product name.
+// Mapped at display time rather than at ingest so rows already stored under the
+// internal name read correctly too — there are months of them, and re-ingesting
+// to fix a label would be a poor trade.
+const DISPLAY_NAME: Record<string, string> = {
+  coworkchat: "Cowork",
+};
+
 const LOGO_FILE: Record<string, string> = {
   copilot: "copilot",
   copilotchat: "copilot",
+  cowork: "cowork",
+  coworkchat: "cowork",
   copilotsearch: "copilot",
   m365copilot: "copilot",
   microsoft365copilot: "copilot",
@@ -38,6 +48,12 @@ export function appLogoSrc(name: string | null | undefined): string | null {
   return file ? `/logos/${file}.png` : null;
 }
 
+/** The product name for an app, where Graph reports an internal one. */
+export function appDisplayName(name: string | null | undefined): string | null {
+  if (!name) return null;
+  return DISPLAY_NAME[normalise(name)] ?? name;
+}
+
 /** An app name rendered with its product logo (blank spacer keeps text aligned). */
 export default function AppLabel({
   name,
@@ -46,7 +62,7 @@ export default function AppLabel({
   name: string | null | undefined;
   className?: string;
 }) {
-  const label = name ?? "—";
+  const label = appDisplayName(name) ?? "—";
   const src = appLogoSrc(name);
   return (
     <span className={`inline-flex items-center gap-2 ${className}`}>
@@ -78,8 +94,9 @@ interface TickProps {
  * chart tooltip); unknown apps fall back to a short truncated text label.
  */
 export function AppAxisTick({ x = 0, y = 0, payload }: TickProps) {
-  const name = String(payload?.value ?? "");
-  const src = appLogoSrc(name);
+  const raw = String(payload?.value ?? "");
+  const name = appDisplayName(raw) ?? raw;
+  const src = appLogoSrc(raw);
   const size = 22;
   if (src) {
     return (

@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import { appLogoSrc } from "./AppLabel";
+import { appDisplayName, appLogoSrc } from "./AppLabel";
 
 export interface AppBarRow {
   /** App name as Graph reports it. Null renders as an em dash. */
@@ -39,7 +39,7 @@ export default function AppBars({
     <div className="space-y-3">
       {rows.map((row) => {
         const src = appLogoSrc(row.name);
-        const label = row.name ?? "—";
+        const label = appDisplayName(row.name) ?? "—";
         return (
           <div key={label} className="flex items-center gap-3">
             {src ? (

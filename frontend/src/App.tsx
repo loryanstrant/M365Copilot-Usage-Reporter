@@ -10,6 +10,7 @@ import CoachingPage from "./pages/CoachingPage";
 import LaggardsPage from "./pages/LaggardsPage";
 import LeaderboardsPage from "./pages/LeaderboardsPage";
 import LicensesPage from "./pages/LicensesPage";
+import ScanHistoryPage from "./pages/ScanHistoryPage";
 import UsersPage from "./pages/UsersPage";
 import LocationsPage from "./pages/LocationsPage";
 import LoginPage from "./pages/LoginPage";
@@ -76,6 +77,10 @@ export default function App() {
           <Route
             path="/settings"
             element={user.role === "admin" ? <SettingsPage /> : <Navigate to="/" replace />}
+          />
+          <Route
+            path="/scan-history"
+            element={user.role === "admin" ? <ScanHistoryPage /> : <Navigate to="/" replace />}
           />
           <Route
             path="/backfill"

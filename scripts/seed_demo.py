@@ -29,6 +29,7 @@ from shared.migrate import upgrade_to_head
 from shared.models import (
     AppConfig,
     EntraUser,
+    JobRun,
     LicenseCount,
     LicensedUser,
     Prompt,
@@ -129,7 +130,11 @@ def _make_users(rng: random.Random, count: int) -> list[EntraUser]:
         if handle in seen:
             handle = f"{handle}{i}"
         seen.add(handle)
-        dept = rng.choice(_DEPARTMENTS)
+        # Round-robin rather than random: a team series is withheld below
+        # five peers, and random assignment leaves some departments with
+        # three people, so the comparison the demo is meant to show never
+        # appears.
+        dept = _DEPARTMENTS[i % len(_DEPARTMENTS)]
         # ~75% of the demo population holds a Copilot licence, so the laggards
         # and licence pages have something meaningful to show.
         licensed = rng.random() < 0.75
@@ -285,6 +290,7 @@ async def seed(days: int = 45, users: int = 90, reset: bool = True) -> dict[str,
     async with SessionLocal() as session:
         if reset:
             # Fact/dimension tables only — credentials and app_users are untouched.
+            await session.execute(delete(JobRun))
             await session.execute(delete(Prompt))
             await session.execute(delete(LicensedUser))
             await session.execute(delete(LicenseCount))
@@ -311,6 +317,11 @@ async def seed(days: int = 45, users: int = 90, reset: bool = True) -> dict[str,
             key=lambda u: sum(1 for pr in prompts if pr.user_id == u.user_id),
             default=None,
         )
+        # Scan history reads job_runs, which nothing else in demo mode writes —
+        # so without this the page the README now advertises is empty on a
+        # freshly seeded instance.
+        session.add_all(_demo_job_runs(now))
+
         if busiest is not None:
             cfg = await session.get(AppConfig, 1)
             if cfg is None:
@@ -328,6 +339,67 @@ async def seed(days: int = 45, users: int = 90, reset: bool = True) -> dict[str,
     }
 
 
+def _demo_job_runs(now: datetime) -> list[JobRun]:
+    """A fortnight of plausible collection runs, including one that failed.
+
+    A run log where everything always succeeded teaches nobody what a failure
+    looks like, which is the case the page exists for.
+    """
+    runs: list[JobRun] = []
+    for day in range(14, 0, -1):
+        started = now - timedelta(days=day)
+        runs.append(
+            JobRun(
+                job_name="scheduled",
+                status="success",
+                started_at=started,
+                finished_at=started + timedelta(seconds=45 + day * 3),
+                stats={"prompts": 90 + day * 7, "entra_users": 40, "licensed_users": 31},
+            )
+        )
+    failed = now - timedelta(days=6, hours=6)
+    runs.append(
+        JobRun(
+            job_name="scheduled",
+            status="failed",
+            started_at=failed,
+            finished_at=failed + timedelta(seconds=7),
+            stats={"error": "AADSTS7000215: invalid client secret provided."},
+        )
+    )
+    manual = now - timedelta(days=2, hours=3)
+    runs.append(
+        JobRun(
+            job_name="manual",
+            status="success",
+            started_at=manual,
+            finished_at=manual + timedelta(seconds=58),
+            stats={"prompts": 64, "entra_users": 40},
+        )
+    )
+    back = now - timedelta(days=13, hours=2)
+    runs.append(
+        JobRun(
+            job_name="backfill",
+            status="completed",
+            started_at=back,
+            finished_at=back + timedelta(minutes=14, seconds=51),
+            stats={"prompts": 2431, "days": 90},
+        )
+    )
+    users = now - timedelta(days=1)
+    runs.append(
+        JobRun(
+            job_name="users",
+            status="success",
+            started_at=users,
+            finished_at=users + timedelta(seconds=12),
+            stats={"entra_users": 40, "licensed_users": 31},
+        )
+    )
+    return runs
+
+
 async def clear() -> dict[str, int]:
     """Remove all seeded usage data, leaving credentials and accounts intact."""
     async with SessionLocal() as session:
@@ -336,6 +408,7 @@ async def clear() -> dict[str, int]:
         cfg = await session.get(AppConfig, 1)
         if cfg is not None:
             cfg.demo_persona_user_id = None
+        await session.execute(delete(JobRun))
         await session.execute(delete(Prompt))
         await session.execute(delete(LicensedUser))
         await session.execute(delete(LicenseCount))

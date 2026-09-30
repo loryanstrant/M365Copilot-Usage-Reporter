@@ -10,7 +10,7 @@ import {
 } from "recharts";
 import type { AppDailyPoint } from "../api/types";
 import { metricLabel, type Metric } from "../filters/FiltersContext";
-import { appLogoSrc } from "./AppLabel";
+import { appDisplayName, appLogoSrc } from "./AppLabel";
 import ChartTooltip from "./ChartTooltip";
 
 // Per-app small multiples: one mini area chart per product surface showing
@@ -106,7 +106,7 @@ export default function AppTrendGrid({
 
     const byApp = new Map<string, Map<string, { p: number; c: number }>>();
     for (const r of rows) {
-      const app = r.app_name ?? "Unknown";
+      const app = appDisplayName(r.app_name) ?? "Unknown";
       const mk = monthKey(r.date);
       const m = byApp.get(app) ?? new Map<string, { p: number; c: number }>();
       const cur = m.get(mk) ?? { p: 0, c: 0 };

@@ -8,6 +8,7 @@ office, company, job title, user, chat type and conversation location.
 """
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import date, timedelta
 from typing import Any
 
@@ -143,6 +144,216 @@ async def copilot_score(
     f = filters or MetricFilters()
     prompts = (await session.scalar(_prompt_query(f, func.count()))) or 0
     return {"prompts": prompts, "score": copilot_score_from_count(prompts)}
+
+
+# job_runs.job_name is not a tidy enum. The code writes these, and rows already
+# in production also carry "scheduled". An unrecognised kind is shown as-is
+# rather than filtered out: a run that happened and is not listed is worse than
+# one labelled awkwardly.
+JOB_KIND_LABELS = {
+    "daily": "Scheduled",
+    "scheduled": "Scheduled",
+    "manual": "Manual",
+    "users": "User sync",
+    "backfill": "Historical backfill",
+}
+
+# Six status values exist across the suite, and "success" and "completed" mean
+# the same thing — they differ only by which module wrote the row. The display
+# layer absorbs that; this is the one place the mapping is decided.
+JOB_STATUS_STATE = {
+    "success": "succeeded",
+    "completed": "succeeded",
+    "running": "running",
+    "preparing": "running",
+    "failed": "failed",
+    "cancelled": "cancelled",
+}
+
+
+async def scan_history(session: AsyncSession, *, limit: int = 100) -> list[dict[str, Any]]:
+    """Every collection this report has run, newest first.
+
+    job_runs has recorded this since the first release and nothing ever showed
+    it, so "did last night's pull actually work?" had no answer in the UI.
+    """
+    rows = (
+        await session.execute(
+            select(JobRun).order_by(JobRun.started_at.desc()).limit(limit)
+        )
+    ).scalars().all()
+
+    out: list[dict[str, Any]] = []
+    for r in rows:
+        stats = r.stats if isinstance(r.stats, dict) else {}
+        duration = None
+        if r.started_at and r.finished_at:
+            duration = max(0, int((r.finished_at - r.started_at).total_seconds()))
+        out.append(
+            {
+                "id": r.id,
+                "kind": JOB_KIND_LABELS.get(r.job_name, r.job_name),
+                "raw_kind": r.job_name,
+                "state": JOB_STATUS_STATE.get(r.status, r.status),
+                "raw_status": r.status,
+                "started_at": r.started_at.isoformat() if r.started_at else None,
+                "finished_at": r.finished_at.isoformat() if r.finished_at else None,
+                "duration_seconds": duration,
+                # The error lives in stats for failed runs; surfacing it is the
+                # difference between a log people can act on and one they cannot.
+                "error": stats.get("error"),
+                "stats": {k: v for k, v in stats.items() if k != "error"},
+            }
+        )
+    return out
+
+
+# A team series is only drawn when the grouping holds at least this many people
+# besides the viewer. Below it, the team average plus the viewer's own figure
+# gives away an individual's number — at n=2 exactly, and at n=3 or 4 closely
+# enough to matter. See docs/specs/comparisons-and-timelines.md.
+MIN_TEAM_PEERS = 5
+
+
+def _percentile(value: int, population: list[int]) -> int | None:
+    """Where ``value`` sits in ``population``, 0-100. None when nobody to rank against.
+
+    Measured against the organisation, never the team: in a team of four,
+    a team-relative percentile says more about the size of the team than about
+    the person.
+    """
+    if not population:
+        return None
+    at_or_below = sum(1 for v in population if v <= value)
+    return round(100.0 * at_or_below / len(population))
+
+
+async def peer_comparison(
+    session: AsyncSession,
+    *,
+    user_id: str,
+    filters: MetricFilters | None = None,
+) -> dict[str, Any]:
+    """This person, their team and the organisation, on the same measures.
+
+    Returns aggregates only — a mean per group, never a list of people. The
+    team is the viewer's department, falling back to everyone sharing their
+    manager, and is **omitted entirely** below MIN_TEAM_PEERS rather than shown
+    from a group small enough to identify someone.
+
+    All three series come from one pass over the same filtered window, so they
+    cannot silently disagree about which period they describe.
+    """
+    f = filters or MetricFilters()
+    org_filters = deepcopy(f)
+    org_filters.user_ids = []
+
+    rows = await by_user(session, filters=org_filters)
+    by_id = {r.get("user_id"): r for r in rows}
+    me = by_id.get(user_id)
+
+    # Distinct apps per person is not part of by_user, so it is counted here.
+    app_rows = (
+        await session.execute(
+            _prompt_query(
+                org_filters,
+                Prompt.user_id,
+                func.count(distinct(Prompt.app_name)).label("apps"),
+            ).group_by(Prompt.user_id)
+        )
+    ).all()
+    apps_by_id = {r[0]: int(r[1] or 0) for r in app_rows}
+
+    def measures(row: dict[str, Any] | None, uid: str | None) -> dict[str, int]:
+        return {
+            "prompts": int((row or {}).get("prompts") or 0),
+            "conversations": int((row or {}).get("conversations") or 0),
+            "apps": apps_by_id.get(uid, 0),
+        }
+
+    mine = measures(me, user_id)
+
+    # Who counts as "my team".
+    peers: list[dict[str, Any]] = []
+    team_label: str | None = None
+    if me:
+        dept = (me.get("department") or "").strip()
+        if dept:
+            peers = [
+                r for r in rows
+                if (r.get("department") or "").strip() == dept
+                and r.get("user_id") != user_id
+            ]
+            team_label = dept
+        if len(peers) < MIN_TEAM_PEERS:
+            mgr = me.get("manager_id")
+            if mgr:
+                peers = [
+                    r for r in rows
+                    if r.get("manager_id") == mgr and r.get("user_id") != user_id
+                ]
+                team_label = "your manager's team" if peers else None
+
+    def mean(values: list[int]) -> int:
+        return round(sum(values) / len(values)) if values else 0
+
+    org = [r for r in rows if r.get("user_id") != user_id]
+    # The window every series was computed over, so the panel can name it. All
+    # three come from this one filtered pass, so they cannot disagree about it.
+    #
+    # With no date filter the honest answer is not "the selected period" — it is
+    # the span the data actually covers, so that is looked up rather than left
+    # blank for the UI to paper over.
+    period_from, period_to = f.date_from, f.date_to
+    if period_from is None or period_to is None:
+        observed = (
+            await session.execute(
+                _prompt_query(
+                    org_filters,
+                    func.min(Prompt.prompt_date),
+                    func.max(Prompt.prompt_date),
+                )
+            )
+        ).one_or_none()
+        if observed:
+            period_from = period_from or observed[0]
+            period_to = period_to or observed[1]
+
+    result: dict[str, Any] = {
+        "period_from": period_from.isoformat() if period_from else None,
+        "period_to": period_to.isoformat() if period_to else None,
+        "mine": mine,
+        "organisation": {
+            "prompts": mean([int(r.get("prompts") or 0) for r in org]),
+            "conversations": mean([int(r.get("conversations") or 0) for r in org]),
+            "apps": mean([apps_by_id.get(r.get("user_id"), 0) for r in org]),
+        },
+        "organisation_size": len(org),
+        "percentile": {
+            "prompts": _percentile(
+                mine["prompts"], [int(r.get("prompts") or 0) for r in org]
+            ),
+            "conversations": _percentile(
+                mine["conversations"],
+                [int(r.get("conversations") or 0) for r in org],
+            ),
+            "apps": _percentile(
+                mine["apps"], [apps_by_id.get(r.get("user_id"), 0) for r in org]
+            ),
+        },
+        "team": None,
+        "team_label": None,
+        "team_size": len(peers),
+    }
+
+    if len(peers) >= MIN_TEAM_PEERS:
+        result["team"] = {
+            "prompts": mean([int(r.get("prompts") or 0) for r in peers]),
+            "conversations": mean([int(r.get("conversations") or 0) for r in peers]),
+            "apps": mean([apps_by_id.get(r.get("user_id"), 0) for r in peers]),
+        }
+        result["team_label"] = team_label
+    return result
 
 
 async def directory_users(session: AsyncSession) -> list[dict[str, Any]]:
