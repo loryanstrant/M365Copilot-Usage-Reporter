@@ -96,12 +96,20 @@ populates departments sparsely, most people will see two series rather than
 three. That is the correct outcome. The alternative is a report that quietly
 discloses individuals' usage to their colleagues.
 
-**Job kinds.** `job_runs.job_name` is not a tidy three-value enum. The code
-writes `daily`, `manual`, `users` and `backfill`, and rows already in
-production also carry `scheduled`. Scan history must map every one of these to
-a readable label and must **not** silently drop a value it does not recognise —
-an unmapped kind renders as its raw value rather than vanishing, because a run
-that happened and is not listed is worse than one labelled awkwardly.
+**Job kinds.** `job_runs.job_name` is not a tidy enum, and — this is the part
+easy to get wrong — **the set differs per repo**. Usage Reporter writes `daily`,
+`manual`, `users` and `backfill`, with `scheduled` also present in production
+rows. Cowork Reporter writes `scheduled`, `manual`, `backfill` and two of its
+own, `csv-cowork-usage` and `csv-credit-consumption`, and never writes `daily`
+or `users` at all.
+
+So the mapping is a **per-repo superset**, not a shared constant: each app
+enumerates what it actually writes — check the code, do not assume — and also
+carries the siblings' values, so a row written under another schema still
+reads. And an unmapped kind must render as its **raw value** rather than
+vanishing, because a run that happened and is not listed is worse than one
+labelled awkwardly. That fallback is what makes getting the list slightly wrong
+survivable.
 
 **Run statuses.** Six values exist across the four codebases: `running`,
 `preparing`, `success`, `completed`, `failed`, `cancelled`. They map to three
