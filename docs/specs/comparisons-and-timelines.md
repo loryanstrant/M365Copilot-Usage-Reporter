@@ -1,0 +1,174 @@
+# Spec — peer comparisons, timelines and scan history
+
+Status: approved 2026-09-30 · Applies to all four solutions
+(M365 Copilot Usage Reporter, M365 Copilot Cowork Reporter,
+M365 Copilot Prompt Analyser, Copilot Studio Agent Quality Reporter).
+
+Follows [`suite-consistency-pass.md`](suite-consistency-pass.md). This copy lives
+in Usage Reporter, which carries the shared foundation; the same file is
+committed to the other three.
+
+---
+
+## Problem
+
+Seven things, reported after living with the suite for a day.
+
+1. **A real app is shown by its internal name.** Usage Reporter lists
+   `CoworkChat` in the app breakdown, with no logo. It is Copilot Cowork, and
+   it should say so.
+2. **Only one solution compares you with anyone.** Prompt Analyser has a "GCSE
+   vs team" chart and the others have nothing — so "am I using this well?" is
+   answerable in one app out of four.
+3. **And that one comparison is mislabelled.** Prompt Analyser's chart draws a
+   bar named *Team average* from `avg(gcse_lever)` with **no filter at all** —
+   it is the average across the entire tenant. In a large tenant that is a
+   materially different number from the one the label promises.
+4. **Agent Quality cannot join its data to people.** It knows a creator's UPN
+   and nothing else — no department, no manager — because its worker only talks
+   to Dataverse and App Insights.
+5. **The same page is called two different things.** *Historical backfill* in
+   Prompt Analyser, *Backfill* in Usage Reporter.
+6. **Only Agent Quality records what it did.** The other three write `job_runs`
+   rows on every collection and then never show them, so "did last night's pull
+   work?" has no answer in the UI.
+7. **Personal pages show totals but not shape.** You can see how many prompts
+   you sent; you cannot see whether you sent them steadily or all in one week.
+   Usage Reporter's page is also the only one with a product name in its title
+   ("Your Copilot usage" against "Your coaching", "Your activity", "Your
+   agents").
+
+## Non-goals
+
+- No change to how any figure is calculated, beyond the team comparison being
+  filtered to an actual team.
+- No full tenant directory sync in Agent Quality. Only the people who appear as
+  agent creators are looked up.
+- Desktop only, as before.
+- No new charting library. Everything uses the suite's existing recharts
+  components and palette.
+
+---
+
+## Decisions taken
+
+| Question | Decision |
+|---|---|
+| Comparison shape | **You / your team / your organisation**, three real series, everywhere |
+| Prompt Analyser's mislabelled chart | **Corrected**, not copied |
+| What "team" means | **Department**, falling back to people sharing your manager; omitted entirely when neither is known |
+| Agent Quality directory data | **Entra lookup of identified creators only** — not the whole tenant |
+| Backfill menu label | **Historical backfill** in all four |
+| Run-history page name | **Scan history** in all four, under `ADMINISTRATION` |
+| Agent Quality's score timeline | **Average score over time with a best-to-worst band**, plus biggest movers |
+| Personal timelines | **Daily bars with a rolling-average trend line** |
+
+---
+
+## Flows
+
+### Seeing how you compare
+
+On each solution's personal page, a **How you compare** panel shows three bars
+per measure: you, your team, your organisation, with your percentile.
+
+"Your team" is your department. Where a tenant does not populate departments,
+it falls back to the people who share your manager. **When neither is known the
+team series is left out** rather than drawn at zero — an empty bar reads as
+"you are miles ahead of your team" when it actually means "we do not know who
+your team is".
+
+Measures per solution:
+
+- **Usage Reporter** — prompts, conversations, apps used
+- **Prompt Analyser** — the GCSE levers (the existing chart, correctly filtered)
+- **Cowork Reporter** — sessions, tools per session *(already built)*
+- **Agent Quality** — agents created, average score
+
+### Agent Quality learning who its creators are
+
+Agents carry a creator UPN from Dataverse. A new sync step looks **those UPNs
+up** in Microsoft Graph — not the tenant — and stores display name, department,
+manager and office against them. That is what makes the team comparison
+possible there, and it turns the Agent creators listing into something with
+real names and departments rather than bare sign-in addresses.
+
+Needs `User.Read.All` on that app registration, which is a consent step. A
+creator who cannot be resolved (left the company, a service principal) is kept
+and shown by UPN — dropping them would silently lose their agents.
+
+### Checking a collection actually ran
+
+**Scan history**, under `ADMINISTRATION` in all four: every run with what kind
+it was (scheduled, manual, backfill), when it started, how long it took, what
+it wrote, and whether it succeeded. Failures show their error. This is what
+`job_runs` has always recorded and nothing ever displayed.
+
+Agent Quality keeps its own scan runs here, which is the page's original
+meaning in that app.
+
+### Seeing the shape of your usage
+
+Personal pages gain a timeline: daily bars with a rolling-average line over
+them, matching the treatment the Usage page already uses for per-app trends.
+
+- **Usage Reporter** — prompts and conversations per day
+- **Prompt Analyser** — prompts per day
+- **Cowork Reporter** — sessions per day *(already built; gains the trend line)*
+- **Agent Quality** — your agents' average score per scan
+
+### Agent Quality's history becoming a timeline
+
+The History page becomes average score over time across whatever the filters
+select, with a shaded best-to-worst band behind the line so spread is visible
+alongside direction, and a list of the biggest movers since the previous scan.
+Filterable by **environment**, **creator** and **agent**.
+
+---
+
+## Acceptance criteria
+
+**Naming and labels**
+- `CoworkChat` displays as **Cowork** with the Cowork logo, in every app that
+  shows app names. Historical rows already stored as `CoworkChat` display
+  correctly — the mapping is at display time, not only at ingest.
+- Usage Reporter's personal page is titled **Your usage**.
+- The backfill menu item reads **Historical backfill** in all four.
+- The run-history page is **Scan history**, under `ADMINISTRATION`, in all four.
+
+**Comparison**
+- Three series render where team is known; two where it is not, with no empty
+  bar and no zero.
+- Prompt Analyser's chart compares against the caller's actual team; its
+  organisation series is labelled as the organisation.
+- A person in a department of one sees their team series equal to their own
+  figure, not an error.
+- The comparison never exposes another individual's figures — aggregates only,
+  as the existing personal-view rule requires.
+
+**Agent Quality directory**
+- Creators resolve to display name, department and manager.
+- An unresolvable creator still appears, keyed by UPN.
+- The sync looks up only UPNs present on agents; it never enumerates the
+  directory.
+
+**Scan history**
+- Shows scheduled, manual and backfill runs, newest first, with status as
+  shape-plus-word (● ◐ ○), never colour alone.
+- A failed run shows its error.
+- Empty state explains that nothing has run yet and how to start one.
+
+**Timelines**
+- Daily bars plus a rolling-average line, on the suite palette.
+- A day with no activity renders as an empty slot, not a gap in the axis.
+- Agent Quality's score timeline responds to all three filters.
+
+---
+
+## Verification
+
+`pytest` per repo · `tsc --noEmit` and the frontend build · the new CI gate ·
+migrations exercised against real Postgres · every changed screen screenshotted
+light and dark from a locally seeded instance with **no tenant credentials
+configured**, so no Graph call is possible and no deployed instance or tenant
+is touched.
