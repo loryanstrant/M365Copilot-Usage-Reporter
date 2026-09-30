@@ -111,20 +111,29 @@ vanishing, because a run that happened and is not listed is worse than one
 labelled awkwardly. That fallback is what makes getting the list slightly wrong
 survivable.
 
-**Run statuses.** Six values exist across the four codebases: `running`,
-`preparing`, `success`, `completed`, `failed`, `cancelled`. They map to three
-indicators:
+**Run statuses.** Seven values exist across the four codebases: `running`,
+`preparing`, `success`, `completed`, `complete`, `failed`, `cancelled`. They
+map to three indicators:
 
 | Indicator | Statuses | Word |
 |---|---|---|
-| `●` | `success`, `completed` | Succeeded |
+| `●` | `success`, `completed`, `complete` | Succeeded |
 | `◐` | `running`, `preparing` | In progress |
 | `○` | `failed`, `cancelled` | Failed / Cancelled |
 
-`success` and `completed` mean the same thing and differ only by which module
-wrote the row. Normalising the vocabulary at the source is out of scope here;
-the display layer absorbs it, and this table is the single place that mapping
-is decided.
+`success`, `completed` and `complete` all mean the same thing and differ only
+by which module wrote the row — three spellings of one state, across four
+applications built from one template. Normalising the vocabulary at the source
+is out of scope here; the display layer absorbs it, and this table is the
+single place that mapping is decided.
+
+**Where the run log lives.** `job_runs` in three of the four. **Not in Agent
+Quality**, which declares the model and has never written a row to it: its runs
+have always gone to the `scans` table, which is richer (source, trigger, score,
+grade, agents attempted versus completed). Reading `job_runs` there would have
+produced a Scan history page that was permanently empty while dozens of real
+scans sat in another table. Each repo reads whichever table it actually
+writes — check, do not assume.
 
 ---
 
