@@ -25,7 +25,7 @@ import type {
 import ChartCard from "../components/ChartCard";
 import ChartTooltip from "../components/ChartTooltip";
 import { barGradId } from "../components/chartTheme";
-import AppLabel from "../components/AppLabel";
+import AppLabel, { appDisplayName } from "../components/AppLabel";
 import AppTrendGrid, { type AppSort } from "../components/AppTrendGrid";
 import DataTable, { type Column } from "../components/DataTable";
 import FilterBar from "../components/FilterBar";
@@ -36,7 +36,7 @@ import { useTheme } from "../theme/ThemeContext";
 const RADAR_COLORS = ["#2f5ae0", "#22c55e", "#f59e0b", "#a855f7", "#ef4444", "#06b6d4"];
 
 const APP_COLUMNS: Column<AppRow>[] = [
-  { key: "app_name", header: "App", type: "text", accessor: (a) => a.app_name, render: (a) => <AppLabel name={a.app_name} /> },
+  { key: "app_name", header: "App", type: "text", accessor: (a) => appDisplayName(a.app_name), render: (a) => <AppLabel name={a.app_name} /> },
   { key: "prompts", header: "Prompts", type: "number", accessor: (a) => a.prompts },
   { key: "conversations", header: "Conversations", type: "number", accessor: (a) => a.conversations },
   { key: "avg", header: "Avg / conv.", type: "number", accessor: (a) => a.avg_prompts_per_conversation },
@@ -116,7 +116,7 @@ export default function UsagePage() {
       "usage-by-app.csv",
       ["App", "Prompts", "Conversations", "Avg per conversation", "Users", "Last use"],
       shownApps.map((a) => [
-        a.app_name ?? "",
+        appDisplayName(a.app_name) ?? "",
         a.prompts,
         a.conversations,
         a.avg_prompts_per_conversation,

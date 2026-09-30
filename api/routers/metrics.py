@@ -347,3 +347,27 @@ async def get_my_comparison(
         "people_counted": len(counts),
         "above_median": my_prompts >= median,
     }
+
+
+@me_router.get("/peers")
+async def get_my_peer_comparison(
+    user: CurrentUser = Depends(get_current_user),
+    filters: MetricFilters = Depends(get_filters),
+    session: AsyncSession = Depends(get_session),
+):
+    """This person against their team and the organisation.
+
+    Aggregates only — a mean per group, never a list of people — and the team
+    is withheld entirely when it is small enough that the mean would give an
+    individual away. See api.metrics.peer_comparison.
+    """
+    me_id = await personal_view_user_id(user, session)
+    if not me_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=(
+                "There is no personal view for this account. Sign in with your "
+                "work account to see your own activity."
+            ),
+        )
+    return await metrics.peer_comparison(session, user_id=me_id, filters=filters)

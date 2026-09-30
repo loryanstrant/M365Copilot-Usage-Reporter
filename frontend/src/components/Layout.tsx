@@ -50,7 +50,7 @@ export default function Layout({ children }: { children: ReactNode }) {
             <>
               <NavSectionLabel>You</NavSectionLabel>
               <NavLink to="/me" className={navClass}>
-                Your Copilot usage
+                Your usage
               </NavLink>
             </>
           )}
@@ -95,7 +95,10 @@ export default function Layout({ children }: { children: ReactNode }) {
                 Settings
               </NavLink>
               <NavLink to="/backfill" className={navClass}>
-                Backfill
+                Historical backfill
+              </NavLink>
+              <NavLink to="/scan-history" className={navClass}>
+                Scan history
               </NavLink>
             </>
           )}

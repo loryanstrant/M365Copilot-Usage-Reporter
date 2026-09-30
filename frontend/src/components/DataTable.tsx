@@ -45,9 +45,17 @@ interface Props<Row> {
   emptyMessage?: string;
   rowClassName?: (row: Row) => string;
   onRowClick?: (row: Row) => void;
-  /** When set, the table body scrolls within this pixel height and the header
-   * sticks to the top — keeps long tables from pushing the page scrollbar away. */
-  maxBodyHeight?: number;
+  /** When set, the table body scrolls within this height and the header sticks
+   * to the top — keeps long tables from pushing the page scrollbar away.
+   *
+   * A number is pixels; a string is any CSS length, which is the useful form:
+   * a fixed pixel cap hides rows behind an inner scrollbar even when the
+   * viewport has room to show them, which on a run log means a failed run can
+   * sit below an invisible fold on a page that is otherwise half empty. Prefer
+   * a viewport-relative value so the body uses the height it actually has —
+   * with a floor, because a bare calc() goes negative on a short window and a
+   * negative max-height clamps to zero, collapsing the table entirely. */
+  maxBodyHeight?: number | string;
   /** Show a per-column filter row, and a "N of M rows" count beneath. */
   filterable?: boolean;
 }
@@ -147,7 +155,16 @@ export default function DataTable<Row>({
     <>
     <div
       className="overflow-auto"
-      style={maxBodyHeight ? { maxHeight: `${maxBodyHeight}px` } : undefined}
+      style={
+        maxBodyHeight
+          ? {
+              maxHeight:
+                typeof maxBodyHeight === "number"
+                  ? `${maxBodyHeight}px`
+                  : maxBodyHeight,
+            }
+          : undefined
+      }
     >
       <table className="w-full text-sm">
         <thead className={maxBodyHeight ? "sticky top-0 z-10" : undefined}>

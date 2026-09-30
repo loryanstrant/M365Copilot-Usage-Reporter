@@ -7,7 +7,9 @@ import AppBars, {
   type AppBarSort,
   sortAppBars,
 } from "../components/AppBars";
+import ActivityTimeline, { type TimelinePoint } from "../components/ActivityTimeline";
 import ChartCard from "../components/ChartCard";
+import PeerComparison, { type PeerComparisonData } from "../components/PeerComparison";
 import KpiCard from "../components/KpiCard";
 
 interface Summary {
@@ -38,6 +40,8 @@ export default function PersonalPage() {
   const [apps, setApps] = useState<AppRow[]>([]);
   const [comparison, setComparison] = useState<Comparison | null>(null);
   const [appSort, setAppSort] = useState<AppBarSort>("value");
+  const [peers, setPeers] = useState<PeerComparisonData | null>(null);
+  const [daily, setDaily] = useState<TimelinePoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,15 +49,19 @@ export default function PersonalPage() {
     let active = true;
     (async () => {
       try {
-        const [s, a, c] = await Promise.all([
+        const [s, a, c, p, d] = await Promise.all([
           api<Summary>("/metrics/me/summary"),
           api<AppRow[]>("/metrics/me/by-app"),
           api<Comparison>("/metrics/me/comparison"),
+          api<PeerComparisonData>("/metrics/me/peers"),
+          api<TimelinePoint[]>("/metrics/me/daily"),
         ]);
         if (!active) return;
         setSummary(s);
         setApps(a);
         setComparison(c);
+        setPeers(p);
+        setDaily(d);
       } catch {
         if (active) setError("We couldn't load your activity just now.");
       } finally {
@@ -85,7 +93,7 @@ export default function PersonalPage() {
   return (
     <div>
       <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">
-        Your Copilot usage
+        Your usage
       </h1>
       <p className="mb-5 mt-1 text-sm text-slate-500 dark:text-slate-400">
         How you've been using Copilot. Only you and your administrators can see this.
@@ -150,6 +158,33 @@ export default function PersonalPage() {
               }
             />
           </div>
+
+          <ChartCard
+            title="Your activity over time"
+            subtitle="Prompts and conversations per day · line is a 7-day average"
+            className="mb-5"
+          >
+            <ActivityTimeline
+              points={daily}
+              series={[
+                { key: "prompts", label: "Prompts" },
+                { key: "conversations", label: "Conversations" },
+              ]}
+            />
+          </ChartCard>
+
+          {peers && (
+            <div className="mb-5">
+              <PeerComparison
+                data={peers}
+                measures={[
+                  { key: "prompts", label: "Prompts" },
+                  { key: "conversations", label: "Conversations" },
+                  { key: "apps", label: "Apps used" },
+                ]}
+              />
+            </div>
+          )}
 
           <ChartCard
             title="Where you use Copilot"
