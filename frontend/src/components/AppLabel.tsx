@@ -35,6 +35,8 @@ const LOGO_FILE: Record<string, string> = {
   forms: "forms",
   onedrive: "onedrive",
   planner: "planner",
+  designer: "designer",
+  microsoftdesigner: "designer",
 };
 
 function normalise(name: string): string {
