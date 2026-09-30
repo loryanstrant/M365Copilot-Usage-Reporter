@@ -11,13 +11,17 @@ export interface PeerComparisonData {
   team: PeerSeries | null;
   team_label: string | null;
   team_size: number;
-  organisation: PeerSeries;
+  organisation: PeerSeries | null;
   organisation_size: number;
   percentile: Partial<Record<keyof PeerSeries, number | null>>;
   period_from: string | null;
   period_to: string | null;
   /** Why the team series is or is not drawn. Stated, never inferred. */
   team_state: "shown" | "too_small" | "unknown";
+  /** The organisation series is withheld on the same floor, for the same
+   * arithmetic — a mean over four people plus your own figure is a disclosure
+   * whatever the group is called. */
+  organisation_state: "shown" | "too_small";
   /** The disclosure floor, owned and enforced by the server. */
   min_team_peers: number;
 }
@@ -86,12 +90,13 @@ export default function PeerComparison({
   measures: PeerMeasure[];
 }) {
   const hasTeam = data.team !== null;
-  const subtitle = hasTeam
-    ? `You, your team (${data.team_label}) and the organisation · ${fmtPeriod(
-        data.period_from,
-        data.period_to,
-      )}`
-    : `You and the organisation · ${fmtPeriod(data.period_from, data.period_to)}`;
+  const hasOrg = data.organisation !== null;
+  const who = hasTeam
+    ? `You, your team (${data.team_label}) and the organisation`
+    : hasOrg
+      ? "You and the organisation"
+      : "You only";
+  const subtitle = `${who} · ${fmtPeriod(data.period_from, data.period_to)}`;
 
   return (
     <ChartCard title="How you compare" subtitle={subtitle}>
@@ -99,15 +104,17 @@ export default function PeerComparison({
         {measures.map((m) => {
           const mine = data.mine[m.key] ?? 0;
           const team = data.team ? data.team[m.key] ?? 0 : null;
-          const org = data.organisation[m.key] ?? 0;
-          const max = Math.max(mine, team ?? 0, org, 1);
+          const org = data.organisation ? data.organisation[m.key] ?? 0 : null;
+          const max = Math.max(mine, team ?? 0, org ?? 0, 1);
           const pct = data.percentile?.[m.key];
           const rows: { label: string; value: number; bar: string }[] = [
             { label: "You", value: mine, bar: "bg-brand-600" },
             ...(team !== null
               ? [{ label: "Your team", value: team, bar: "bg-brand-300" }]
               : []),
-            { label: "Organisation", value: org, bar: "bg-slate-400" },
+            ...(org !== null
+              ? [{ label: "Organisation", value: org, bar: "bg-slate-400" }]
+              : []),
           ];
           return (
             <div key={m.key}>
@@ -144,7 +151,19 @@ export default function PeerComparison({
           );
         })}
       </div>
-      {!hasTeam && <p className="mt-4 text-xs text-slate-400 dark:text-slate-500">{withheldNote(data)}</p>}
+      {!hasTeam && (
+        <p className="mt-4 text-xs text-slate-400 dark:text-slate-500">
+          {withheldNote(data)}
+        </p>
+      )}
+      {!hasOrg && (
+        <p className="mt-2 text-xs text-slate-400 dark:text-slate-500">
+          No organisation comparison either — only {data.organisation_size} other{" "}
+          {data.organisation_size === 1 ? "person has" : "people have"} activity on
+          file, which is below the same floor of {data.min_team_peers}. An average
+          over a group that small is an individual's figure in disguise.
+        </p>
+      )}
     </ChartCard>
   );
 }

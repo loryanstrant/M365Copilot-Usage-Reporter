@@ -242,3 +242,57 @@ async def test_with_no_filter_the_period_is_the_span_the_data_covers():
     body = await _compare()
     assert body["period_from"] == "2026-08-03"
     assert body["period_to"] == "2026-09-14"
+
+
+# --------------------------------------------------------------------------- #
+# The organisation series is withheld on the same floor, for the same reason
+# --------------------------------------------------------------------------- #
+@pytest.mark.asyncio
+async def test_a_tiny_tenant_gets_no_organisation_series_either():
+    """The rule is that a mean plus your own figure gives an individual away.
+    That arithmetic does not care whether the group is called a team or a
+    tenant: in a four-person pilot the organisation bar is exactly as revealing
+    as a team of four."""
+    await _person(ME, "Finance", 10)
+    for i in range(3):
+        await _person(f"p{i}", "Finance", 4)
+    body = await _compare()
+    assert body["organisation_state"] == "too_small"
+    assert body["organisation"] is None
+    assert body["organisation_size"] == 3
+
+
+@pytest.mark.asyncio
+async def test_the_percentile_goes_with_the_population_it_ranks_against():
+    """Leaving a percentile behind after withholding the series would disclose
+    by another route — it is a statement about the same small group."""
+    await _person(ME, "Finance", 10)
+    for i in range(3):
+        await _person(f"p{i}", "Finance", 4)
+    body = await _compare()
+    assert body["percentile"]["prompts"] is None
+    assert body["percentile"]["conversations"] is None
+    assert body["percentile"]["apps"] is None
+
+
+@pytest.mark.asyncio
+async def test_an_organisation_at_the_floor_is_shown():
+    await _person(ME, "Finance", 10)
+    for i in range(MIN_TEAM_PEERS):
+        await _person(f"p{i}", "Sales", 4)
+    body = await _compare()
+    assert body["organisation_state"] == "shown"
+    assert body["organisation"]["prompts"] == 4
+    assert body["percentile"]["prompts"] == 100
+
+
+@pytest.mark.asyncio
+async def test_a_tiny_tenant_still_reports_the_viewers_own_figures():
+    """Withholding the comparison must not blank the page — your own numbers
+    are yours, and they are the only thing on it that is never a disclosure."""
+    await _person(ME, "Finance", 10)
+    await _person("other", "Finance", 4)
+    body = await _compare()
+    assert body["mine"]["prompts"] == 10
+    assert body["team"] is None
+    assert body["organisation"] is None

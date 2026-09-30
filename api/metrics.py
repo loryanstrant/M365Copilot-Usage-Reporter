@@ -345,13 +345,38 @@ async def peer_comparison(
         "period_from": period_from.isoformat() if period_from else None,
         "period_to": period_to.isoformat() if period_to else None,
         "mine": mine,
-        "organisation": {
+        # Withheld on the same floor as the team, and for the same arithmetic.
+        # The rule is that a mean plus the viewer's own figure gives an
+        # individual away, and that does not care whether the group is called a
+        # team or a tenant: in a four-person pilot the organisation bar is
+        # exactly as revealing as a team of four would be. Note this series is
+        # shown on the personal page to people who may have no organisation-view
+        # access at all, which is why it needs its own floor even though the
+        # Overview page publishes tenant aggregates to those who do.
+        "organisation": None,
+        "organisation_size": len(org),
+        "organisation_state": "too_small",
+        # Withheld with the organisation series it is measured against — a
+        # percentile over four people is a disclosure by another route.
+        "percentile": {"prompts": None, "conversations": None, "apps": None},
+        "team": None,
+        "team_label": None,
+        "team_size": len(peers),
+        # The floor is the server's to own. Returned so the page can say
+        # "only shown from five" without hardcoding a number it does not
+        # enforce and cannot be trusted to keep in step.
+        "min_team_peers": MIN_TEAM_PEERS,
+        "team_state": "unknown",
+    }
+
+    if len(org) >= MIN_TEAM_PEERS:
+        result["organisation"] = {
             "prompts": mean([int(r.get("prompts") or 0) for r in org]),
             "conversations": mean([int(r.get("conversations") or 0) for r in org]),
             "apps": mean([apps_by_id.get(r.get("user_id"), 0) for r in org]),
-        },
-        "organisation_size": len(org),
-        "percentile": {
+        }
+        result["organisation_state"] = "shown"
+        result["percentile"] = {
             "prompts": _percentile(
                 mine["prompts"], [int(r.get("prompts") or 0) for r in org]
             ),
@@ -362,16 +387,7 @@ async def peer_comparison(
             "apps": _percentile(
                 mine["apps"], [apps_by_id.get(r.get("user_id"), 0) for r in org]
             ),
-        },
-        "team": None,
-        "team_label": None,
-        "team_size": len(peers),
-        # The floor is the server's to own. Returned so the page can say
-        # "only shown from five" without hardcoding a number it does not
-        # enforce and cannot be trusted to keep in step.
-        "min_team_peers": MIN_TEAM_PEERS,
-        "team_state": "unknown",
-    }
+        }
 
     if len(peers) >= MIN_TEAM_PEERS:
         result["team"] = {

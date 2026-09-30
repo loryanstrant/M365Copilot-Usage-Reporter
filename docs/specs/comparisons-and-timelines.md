@@ -125,6 +125,38 @@ Two details that follow from the same reasoning:
   department of three with a manager group of one loses the larger grouping and
   gets no closer to the floor; fall back only when it does better.
 
+**The floor applies to the organisation series too.** Found during the Prompt
+Analyser build and ratified here for all four. The rule is that a mean plus the
+viewer's own figure gives an individual away, and that arithmetic does not care
+whether the group is called a team or a tenant — in a four-person pilot the
+organisation bar is exactly as revealing as a team of four would be. So
+`organisation_state` is `shown` or `too_small` on the same threshold, and the
+percentile is withheld with the population it was measured against, since
+leaving it behind discloses by another route.
+
+This does not contradict the Overview page publishing tenant aggregates. That
+page is behind the organisation-view gate; the personal page's organisation
+series is shown to people who may have no organisation access at all. Different
+audiences, so the personal page needs its own floor.
+
+A viewer in a tenant below the floor sees their own figures and nothing else,
+with a sentence saying why. Their own numbers are never a disclosure.
+
+**Percentile precision is a property of the measure, not a suite-wide UI rule.**
+Prompt Analyser shows a **band** ("in the upper half of the organisation")
+rather than an exact percentile, because its measures are GCSE lever averages
+out of 10: on a 22-person directory two people whose averages both display as
+4.8 land on the 38th and 43rd percentile, which is precision the figure has not
+got. Counts — prompts, conversations, sessions, agents — have far more spread
+and far fewer ties, so **the other three keep the exact percentile**. Do not
+copy the band across on consistency grounds; it would throw away precision that
+is real for a count. The exact value stays in the payload either way.
+
+One bug fixed alongside it, worth repeating because it is easy to reproduce:
+rank the **raw** value against a **raw** population. Prompt Analyser ranked a
+figure rounded to one decimal against an unrounded population, so somebody on
+4.84 sat behind everybody on 4.81.
+
 **Job kinds.** `job_runs.job_name` is not a tidy enum, and — this is the part
 easy to get wrong — **the set differs per repo**. Usage Reporter writes `daily`,
 `manual`, `users` and `backfill`, with `scheduled` also present in production
@@ -263,7 +295,11 @@ Filterable by **environment**, **creator** and **agent**.
 - The comparison never exposes another individual's figures — aggregates only,
   as the existing personal-view rule requires.
 - All three series cover the same period, and the panel names the period.
-- The percentile states the population it is measured against.
+- The percentile states the population it is measured against, and is withheld
+  whenever the organisation series it ranks against is.
+- A tenant with fewer than five other people on file shows no organisation
+  series and no percentile, and says why — but still shows the viewer's own
+  figures.
 
 **Agent Quality directory**
 - Creators resolve to display name, department and manager.
