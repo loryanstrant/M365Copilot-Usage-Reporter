@@ -490,11 +490,29 @@ async def sync_users(
                 try:
                     await session.commit()
                 except BaseException:  # noqa: BLE001
-                    # Under cancellation the commit is itself cancelled, so the
-                    # row can still be left behind — the same gap run_ingest has.
-                    logger.warning(
-                        "Could not record the failed users job run", exc_info=True
-                    )
+                    # When the failure was itself a database error the session
+                    # needs rolling back before it will commit anything — and
+                    # that rollback discards the job row built above, so record
+                    # the run as a fresh row rather than leaving the flushed one
+                    # claiming to be running.
+                    try:
+                        await session.rollback()
+                        session.add(
+                            JobRun(
+                                job_name="users",
+                                status="failed",
+                                started_at=now,
+                                finished_at=datetime.now(timezone.utc),
+                                stats=stats,
+                            )
+                        )
+                        await session.commit()
+                    except BaseException:  # noqa: BLE001
+                        # Under cancellation these awaits are cancelled too, so
+                        # the run can go unrecorded — the gap run_ingest shares.
+                        logger.warning(
+                            "Could not record the failed users job run", exc_info=True
+                        )
                 logger.exception("User sync failed")
                 raise
             finally:

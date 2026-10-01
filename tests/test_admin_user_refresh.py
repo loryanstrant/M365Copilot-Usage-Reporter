@@ -17,6 +17,8 @@ import pytest_asyncio
 from asgi_lifespan import LifespanManager
 
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.routers import admin as admin_router
 from shared.db import SessionLocal
@@ -216,6 +218,43 @@ async def test_a_cancelled_sync_does_not_jam_it_either(monkeypatch):
             await s.execute(select(JobRun).where(JobRun.job_name == "users"))
         ).scalars().all()
         assert [r.status for r in rows] == ["failed"]
+
+
+@pytest.mark.asyncio
+async def test_a_failed_commit_still_records_the_run(monkeypatch):
+    """When writing the failure fails, the run is recorded rather than lost.
+
+    A database error leaves the session needing a rollback before it will commit
+    anything, and that rollback discards the job row the sync had flushed. Here
+    the first commit — the one persisting the failure — is made to fail, so the
+    recovery path is the only thing that can leave a row behind.
+    """
+    real_commit = AsyncSession.commit
+    commits = {"n": 0}
+
+    async def flaky_commit(self):
+        commits["n"] += 1
+        if commits["n"] == 1:
+            raise OperationalError("commit", None, Exception("disk I/O error"))
+        await real_commit(self)
+
+    async def boom(session, graph, config):
+        raise RuntimeError("Graph said no")
+
+    monkeypatch.setattr(ingest, "sync_licensed_users", boom)
+    monkeypatch.setattr(AsyncSession, "commit", flaky_commit)
+
+    with pytest.raises(RuntimeError):
+        await ingest.sync_users(SessionLocal, graph=object(), config=_config())
+
+    monkeypatch.undo()
+    assert ingest.user_sync_running() is False
+    async with SessionLocal() as s:
+        rows = (
+            await s.execute(select(JobRun).where(JobRun.job_name == "users"))
+        ).scalars().all()
+        assert [r.status for r in rows] == ["failed"]
+        assert rows[0].stats and rows[0].stats["error"] == "Graph said no"
 
 
 @pytest.mark.asyncio
