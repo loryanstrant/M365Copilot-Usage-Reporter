@@ -16,10 +16,45 @@ import pytest
 import pytest_asyncio
 from asgi_lifespan import LifespanManager
 
+from sqlalchemy import select
+
 from api.routers import admin as admin_router
 from shared.db import SessionLocal
-from shared.models import AppUser
+from shared.models import AppConfig, AppUser, JobRun
 from shared.security import hash_password
+from worker import ingest
+
+
+@pytest.fixture(autouse=True)
+def _reset_user_sync_progress():
+    """``_user_sync`` is a module global; don't let one test's run colour another."""
+    ingest._user_sync = type(ingest._user_sync)()
+    yield
+    ingest._user_sync = type(ingest._user_sync)()
+
+
+def _config() -> AppConfig:
+    """Credentials complete enough that the Graph client is never built."""
+    return AppConfig(
+        id=1, tenant_id="tenant", client_id="client", client_secret_encrypted="x"
+    )
+
+
+def _stub_sync_steps(monkeypatch, *, licensed: int, directory: int) -> None:
+    """Replace the three Graph-reading steps with counts, nothing else."""
+
+    async def _licensed(session, graph, config):
+        return licensed
+
+    async def _counts(session, graph, config, now):
+        return 1
+
+    async def _directory(session, graph, config):
+        return directory
+
+    monkeypatch.setattr(ingest, "sync_licensed_users", _licensed)
+    monkeypatch.setattr(ingest, "sync_license_counts", _counts)
+    monkeypatch.setattr(ingest, "sync_entra_users", _directory)
 
 
 @pytest_asyncio.fixture
@@ -130,6 +165,78 @@ async def test_failure_is_visible_on_the_status_endpoint(client):
     assert body["detail"] == "Graph is not configured yet."
     assert body["running"] is False
     assert body["updated_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_a_credential_failure_does_not_jam_the_button_forever(client):
+    """The failure that used to wedge the feature for the life of the process.
+
+    A tenant ID saved without a client secret makes ``build_graph_client`` raise
+    before any job row exists. That raise used to escape the guarded block with
+    ``_user_sync.status`` still "running", so ``user_sync_running()`` answered
+    True forever and every later press got ``already_running`` with nothing
+    running — unrecoverable short of restarting the container.
+    """
+    async with SessionLocal() as s:
+        s.add(AppConfig(id=1, tenant_id="tenant", client_id="client"))
+        await s.commit()
+    headers = await _admin_headers(client)
+
+    first = await client.post("/admin/users/refresh", headers=headers)
+    assert first.json()["status"] == "started"
+
+    body = (await client.get("/admin/users/status", headers=headers)).json()
+    assert body["running"] is False
+    assert body["status"] == "failed"
+    assert "not fully configured" in body["detail"]
+
+    second = await client.post("/admin/users/refresh", headers=headers)
+    assert second.json()["status"] == "started"
+
+
+@pytest.mark.asyncio
+async def test_a_cancelled_sync_does_not_jam_it_either(monkeypatch):
+    """CancelledError is a BaseException, so `except Exception` never sees it."""
+
+    async def cancelled(session, graph, config):
+        raise asyncio.CancelledError()
+
+    monkeypatch.setattr(ingest, "sync_licensed_users", cancelled)
+
+    with pytest.raises(asyncio.CancelledError):
+        await ingest.sync_users(SessionLocal, graph=object(), config=_config())
+
+    assert ingest.user_sync_running() is False
+    assert ingest.get_user_sync_progress()["status"] == "failed"
+
+    # And the job row is not left claiming to be running — Scan history and the
+    # "last run" line both read it.
+    async with SessionLocal() as s:
+        rows = (
+            await s.execute(select(JobRun).where(JobRun.job_name == "users"))
+        ).scalars().all()
+        assert [r.status for r in rows] == ["failed"]
+
+
+@pytest.mark.asyncio
+async def test_a_failure_does_not_report_the_previous_runs_counts(monkeypatch):
+    """Counts are zeroed at the start, so `failed` never carries stale numbers."""
+    _stub_sync_steps(monkeypatch, licensed=7, directory=9)
+    await ingest.sync_users(SessionLocal, graph=object(), config=_config())
+    assert ingest.get_user_sync_progress()["licensed_users"] == 7
+    assert ingest.get_user_sync_progress()["directory_users"] == 9
+
+    async def boom(session, graph, config):
+        raise RuntimeError("Graph said no")
+
+    monkeypatch.setattr(ingest, "sync_licensed_users", boom)
+    with pytest.raises(RuntimeError):
+        await ingest.sync_users(SessionLocal, graph=object(), config=_config())
+
+    progress = ingest.get_user_sync_progress()
+    assert progress["status"] == "failed"
+    assert progress["licensed_users"] == 0
+    assert progress["directory_users"] == 0
 
 
 @pytest.mark.asyncio

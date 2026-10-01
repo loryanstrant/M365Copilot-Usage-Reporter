@@ -393,6 +393,19 @@ def user_sync_running() -> bool:
     return _user_sync.status == "running"
 
 
+def _mark_user_sync_failed(detail: str) -> None:
+    """Record a failed user sync and release the "running" flag.
+
+    Only the first failure wins: a re-raise passing back out through an outer
+    handler must not overwrite the real reason with a vaguer one.
+    """
+    if _user_sync.status != "running":
+        return
+    _user_sync.status = "failed"
+    _user_sync.detail = detail
+    _user_sync.updated_at = datetime.now(timezone.utc).isoformat()
+
+
 async def sync_users(
     session_factory: SessionFactory,
     *,
@@ -405,66 +418,98 @@ async def sync_users(
     Recorded as a ``users`` job for observability and exposed via live progress
     so the first-run UI can extract users before a refresh/backfill.
     """
-    now = now or datetime.now(timezone.utc)
     owns_graph = False
-    _user_sync.status = "running"
-    _user_sync.detail = "Reading licensed users…"
-    _user_sync.updated_at = now.isoformat()
 
-    async with session_factory() as session:
-        if config is None:
-            config = await load_app_config(session)
-            if config is None or not config.tenant_id:
-                _user_sync.status = "failed"
-                _user_sync.detail = "Graph is not configured yet."
+    # Nothing between raising the flag and the guard. `status = "running"` is
+    # what ``user_sync_running()`` reads and what the manual refresh endpoint
+    # refuses a second run on, so any path that leaves it set jams the feature
+    # for the life of the process — no later sync can clear it. That is what
+    # used to happen when the client build raised (no stored secret, or MSAL's
+    # tenant discovery rejecting the authority) outside the try below.
+    try:
+        now = now or datetime.now(timezone.utc)
+        _user_sync.status = "running"
+        _user_sync.detail = "Reading licensed users…"
+        # Zeroed at the start: a failure must report nothing rather than the
+        # counts the last successful run happened to leave behind.
+        _user_sync.licensed_users = 0
+        _user_sync.directory_users = 0
+        _user_sync.updated_at = now.isoformat()
+
+        async with session_factory() as session:
+            if config is None:
+                config = await load_app_config(session)
+                if config is None or not config.tenant_id:
+                    raise IngestError("Graph is not configured yet.")
+            if graph is None:
+                graph = build_graph_client(config)
+                owns_graph = True
+
+            job = JobRun(job_name="users", status="running")
+            session.add(job)
+            await session.flush()
+            stats: dict[str, Any] = {}
+            try:
+                stats["licensed_users"] = await sync_licensed_users(
+                    session, graph, config
+                )
+                _user_sync.licensed_users = stats["licensed_users"]
+                _user_sync.detail = "Recording licence totals…"
                 _user_sync.updated_at = datetime.now(timezone.utc).isoformat()
-                raise IngestError("Graph is not configured yet.")
-        if graph is None:
-            graph = build_graph_client(config)
-            owns_graph = True
 
-        job = JobRun(job_name="users", status="running")
-        session.add(job)
-        await session.flush()
-        stats: dict[str, Any] = {}
-        try:
-            stats["licensed_users"] = await sync_licensed_users(session, graph, config)
-            _user_sync.licensed_users = stats["licensed_users"]
-            _user_sync.detail = "Recording licence totals…"
-            _user_sync.updated_at = datetime.now(timezone.utc).isoformat()
+                stats["license_counts"] = await sync_license_counts(
+                    session, graph, config, now
+                )
+                _user_sync.detail = "Reading directory users…"
+                _user_sync.updated_at = datetime.now(timezone.utc).isoformat()
 
-            stats["license_counts"] = await sync_license_counts(
-                session, graph, config, now
-            )
-            _user_sync.detail = "Reading directory users…"
-            _user_sync.updated_at = datetime.now(timezone.utc).isoformat()
+                stats["entra_users"] = await sync_entra_users(session, graph, config)
+                _user_sync.directory_users = stats["entra_users"]
 
-            stats["entra_users"] = await sync_entra_users(session, graph, config)
-            _user_sync.directory_users = stats["entra_users"]
-
-            job.status = "success"
-            job.finished_at = datetime.now(timezone.utc)
-            job.stats = stats
-            await session.commit()
-            _user_sync.status = "completed"
-            _user_sync.detail = None
-            _user_sync.updated_at = job.finished_at.isoformat()
-            logger.info("User sync complete: %s", stats)
-            return stats
-        except Exception as exc:  # noqa: BLE001 - persisted for observability
-            stats["error"] = str(exc)
-            job.status = "failed"
-            job.finished_at = datetime.now(timezone.utc)
-            job.stats = stats
-            await session.commit()
-            _user_sync.status = "failed"
-            _user_sync.detail = str(exc)
-            _user_sync.updated_at = job.finished_at.isoformat()
-            logger.exception("User sync failed")
-            raise
-        finally:
-            if owns_graph and graph is not None:
-                await graph.aclose()
+                job.status = "success"
+                job.finished_at = datetime.now(timezone.utc)
+                job.stats = stats
+                await session.commit()
+                _user_sync.status = "completed"
+                _user_sync.detail = None
+                _user_sync.updated_at = job.finished_at.isoformat()
+                logger.info("User sync complete: %s", stats)
+                return stats
+            except BaseException as exc:  # noqa: BLE001 - persisted for observability
+                # BaseException, not Exception: a cancelled refresh (uvicorn
+                # shutting down mid-run) must not leave the job row claiming to
+                # be running, which is what Scan history and "last run" read.
+                detail = str(exc) or "The user extraction stopped before it finished."
+                # Release the flag before touching the database: if persisting
+                # the failed job row then fails, the feature must still work.
+                _mark_user_sync_failed(detail)
+                stats["error"] = detail
+                job.status = "failed"
+                job.finished_at = datetime.now(timezone.utc)
+                job.stats = stats
+                try:
+                    await session.commit()
+                except BaseException:  # noqa: BLE001
+                    # Under cancellation the commit is itself cancelled, so the
+                    # row can still be left behind — the same gap run_ingest has.
+                    logger.warning(
+                        "Could not record the failed users job run", exc_info=True
+                    )
+                logger.exception("User sync failed")
+                raise
+            finally:
+                if owns_graph and graph is not None:
+                    await graph.aclose()
+    except Exception as exc:
+        # Raised before there was a job row to record it against — no credentials
+        # stored, or the Graph client refusing to build.
+        _mark_user_sync_failed(str(exc))
+        raise
+    finally:
+        # CancelledError is a BaseException, so the handlers above never see a
+        # cancelled refresh. Whatever path was taken, the flag does not survive;
+        # a no-op once a real reason has already been recorded.
+        _mark_user_sync_failed("The user extraction stopped before it finished.")
 
 
 async def test_graph_connection(config: AppConfig) -> dict[str, Any]:

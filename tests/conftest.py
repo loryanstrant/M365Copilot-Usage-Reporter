@@ -6,15 +6,30 @@ module, because ``shared.db`` builds its engine at import time.
 """
 from __future__ import annotations
 
+import atexit
 import os
 import tempfile
 
 # --- Configure environment before importing app modules ------------------
 # Force an isolated SQLite database so the suite never touches a real Postgres
 # (compose sets DATABASE_URL in the container; a plain setdefault wouldn't win).
-_TMP_DB = os.path.join(tempfile.gettempdir(), "copilot_test.db")
+# The process ID is in the name because two suites sharing one file is not
+# hypothetical: a fixed "copilot_test.db" in a shared /tmp had concurrent runs
+# dropping each other's tables mid-test, which surfaces as `disk I/O error` in
+# tests that have nothing to do with each other and gets re-run rather than
+# diagnosed. Removed on exit so the temp directory doesn't fill with stragglers.
+_TMP_DB = os.path.join(tempfile.gettempdir(), f"copilot_test_{os.getpid()}.db")
 if os.path.exists(_TMP_DB):
     os.remove(_TMP_DB)
+
+
+@atexit.register
+def _remove_test_db() -> None:
+    for path in (_TMP_DB, f"{_TMP_DB}-wal", f"{_TMP_DB}-shm"):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
 
 os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{_TMP_DB}"
 os.environ["RUN_MIGRATIONS_ON_STARTUP"] = "false"
