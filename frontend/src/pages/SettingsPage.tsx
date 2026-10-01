@@ -8,6 +8,7 @@ import type {
   IngestRunResult,
   StatusResult,
   TestConnectionResult,
+  UserSyncStatus,
 } from "../api/types";
 
 
@@ -38,9 +39,11 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [ingesting, setIngesting] = useState(false);
+  const [syncingUsers, setSyncingUsers] = useState(false);
   const [banner, setBanner] = useState<Banner | null>(null);
   const [test, setTest] = useState<TestConnectionResult | null>(null);
   const [status, setStatus] = useState<StatusResult | null>(null);
+  const [userSync, setUserSync] = useState<UserSyncStatus | null>(null);
 
   const [tenantId, setTenantId] = useState("");
   const [clientId, setClientId] = useState("");
@@ -66,7 +69,12 @@ export default function SettingsPage() {
 
   async function refreshStatus() {
     try {
-      setStatus(await api<StatusResult>("/admin/status"));
+      const [s, u] = await Promise.all([
+        api<StatusResult>("/admin/status"),
+        api<UserSyncStatus>("/admin/users/status"),
+      ]);
+      setStatus(s);
+      setUserSync(u);
     } catch {
       /* ignore transient status errors */
     }
@@ -170,6 +178,34 @@ export default function SettingsPage() {
       });
     } finally {
       setIngesting(false);
+    }
+  }
+
+  // Sibling of "Run now": same start-then-poll shape, but only the directory and
+  // licence lists. `already_running` is a normal answer, not a failure — the
+  // endpoint returns it with a 200 and its own wording, so it shows as info.
+  // The one extra status read before the poll loop is so the button flips to
+  // "Running…" straight away rather than staying pressable for three seconds.
+  async function onRefreshUsers() {
+    setSyncingUsers(true);
+    setBanner(null);
+    try {
+      const res = await api<IngestRunResult>("/admin/users/refresh", { method: "POST" });
+      setBanner({ kind: "info", text: res.detail });
+      await refreshStatus();
+      let ticks = 0;
+      const timer = setInterval(async () => {
+        ticks += 1;
+        await refreshStatus();
+        if (ticks >= 20) clearInterval(timer);
+      }, 3000);
+    } catch (err) {
+      setBanner({
+        kind: "error",
+        text: err instanceof ApiError ? err.message : "User refresh failed to start",
+      });
+    } finally {
+      setSyncingUsers(false);
     }
   }
 
@@ -353,7 +389,25 @@ export default function SettingsPage() {
             >
               {ingesting ? "Starting…" : "Run now"}
             </button>
+            <button
+              type="button"
+              onClick={onRefreshUsers}
+              disabled={syncingUsers || (userSync?.running ?? false)}
+              className="rounded-lg border border-brand-300 bg-brand-50 px-4 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-100 disabled:opacity-60 dark:border-brand-700 dark:bg-brand-900/20 dark:text-brand-400"
+            >
+              {syncingUsers
+                ? "Starting…"
+                : userSync?.running
+                  ? "Running…"
+                  : "Refresh user list"}
+            </button>
           </div>
+          <p className="text-xs text-slate-400 dark:text-slate-500">
+            <strong>Run now</strong> pulls usage data. <strong>Refresh user list</strong>{" "}
+            only re-reads your directory and Copilot licence assignments, without waiting
+            for the next scheduled refresh. Open <strong>Tenant users</strong> afterwards
+            to see the new list.
+          </p>
         </form>
 
         <div className="space-y-6">

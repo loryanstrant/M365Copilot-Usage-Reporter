@@ -29,8 +29,14 @@ COPY . .
 # ---- Frontend build (produces the static SPA bundle) ----
 FROM node:20-alpine AS frontend-build
 WORKDIR /app/frontend
-COPY frontend/package.json ./
-RUN npm install
+# `npm ci` installs exactly the lockfile that CI type-checked and tested. The
+# previous `npm install` with no lockfile copied in resolved the tree afresh on
+# every build, so the published image's dependency tree was one nothing had
+# verified — and on a sibling repo adding a single devDependency tipped that
+# resolution over entirely, failing the publish with npm's
+# "Cannot read properties of null (reading 'edgesOut')".
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
 COPY frontend/ ./
 RUN npm run build
 
