@@ -5,6 +5,10 @@ licence-count rows the reports join against — no Microsoft Graph calls.
 Use it to explore the UI locally, or to demo the reporter before wiring up a
 tenant.
 
+The people, departments and offices come from ``scripts/_demo_tenant.py``, which
+is shared verbatim with the sibling solutions so that all four demo the same
+fictional organisation (Avanoso) rather than three different ones.
+
 Run inside the container / venv::
 
     python -m scripts.seed_demo                  # ~45 days, 40 users
@@ -24,6 +28,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from sqlalchemy import delete
 
+from scripts._demo_tenant import COMPANY, COUNTRY, roster
 from shared.db import SessionLocal
 from shared.migrate import upgrade_to_head
 from shared.models import (
@@ -35,24 +40,9 @@ from shared.models import (
     Prompt,
 )
 
-_FIRST = [
-    "Ava", "Noah", "Mia", "Liam", "Zoe", "Ethan", "Ruby", "Kai", "Isla", "Leo",
-    "Nina", "Omar", "Priya", "Sam", "Tara", "Hugo", "Elsie", "Jai", "Maya", "Finn",
-]
-_LAST = [
-    "Bennett", "Okafor", "Nguyen", "Silva", "Kaur", "Murphy", "Chen", "Rossi",
-    "Haddad", "Novak", "Osei", "Lindqvist", "Ferreira", "Yamada", "Duarte",
-]
-
-_DEPARTMENTS = [
-    "Sales", "Marketing", "Finance", "Engineering", "People & Culture",
-    "Customer Success", "Legal", "Operations",
-]
-_OFFICES = ["Sydney", "Melbourne", "Brisbane", "Perth", "Auckland", "Singapore"]
-_TITLES = [
-    "Account Executive", "Analyst", "Consultant", "Engineer", "Manager",
-    "Director", "Coordinator", "Specialist",
-]
+# The fictional directory — names, departments, offices, titles and who holds a
+# licence — comes from ``scripts/_demo_tenant.py``, which is shared verbatim with
+# the sibling solutions so all four demo the same organisation.
 
 # The apps that surface Copilot interactions, with a baseline share of the mix
 # and a per-app trajectory. Trajectory is a multiplier applied across the window:
@@ -121,37 +111,30 @@ def _weighted_app(rng: random.Random, progress: float) -> str:
 
 
 def _make_users(rng: random.Random, count: int) -> list[EntraUser]:
+    """Build the directory from the shared Avanoso roster.
+
+    The roster is fixed rather than randomly assembled, so the same named people
+    with the same jobs appear here and in every sibling solution. Who holds a
+    licence is fixed there too (30 of the canonical 40), which keeps the laggards
+    and licence pages agreeing with the other products rather than each rolling
+    its own 75%.
+    """
     users: list[EntraUser] = []
-    seen: set[str] = set()
-    for i in range(count):
-        first = rng.choice(_FIRST)
-        last = rng.choice(_LAST)
-        handle = f"{first}.{last}".lower()
-        if handle in seen:
-            handle = f"{handle}{i}"
-        seen.add(handle)
-        # Round-robin rather than random: a team series is withheld below
-        # five peers, and random assignment leaves some departments with
-        # three people, so the comparison the demo is meant to show never
-        # appears.
-        dept = _DEPARTMENTS[i % len(_DEPARTMENTS)]
-        # ~75% of the demo population holds a Copilot licence, so the laggards
-        # and licence pages have something meaningful to show.
-        licensed = rng.random() < 0.75
+    for person in roster(count):
         users.append(
             EntraUser(
                 user_id=str(uuid.uuid4()),
-                upn=f"{handle}@demo.local",
-                email=f"{handle}@demo.local",
-                display_name=f"{first} {last}",
-                job_title=rng.choice(_TITLES),
-                company_name="Contoso Demo",
-                department=dept,
-                office_location=rng.choice(_OFFICES),
-                country="AU",
+                upn=person.upn,
+                email=person.upn,
+                display_name=person.display_name,
+                job_title=person.title,
+                company_name=COMPANY,
+                department=person.department,
+                office_location=person.office,
+                country=COUNTRY,
                 account_enabled=True,
                 user_type="Member",
-                has_copilot_license=licensed,
+                has_copilot_license=person.licensed,
             )
         )
     # Give each department a manager drawn from its own people, so the manager
@@ -201,7 +184,7 @@ def _adoption_profiles(
     return profiles
 
 
-async def seed(days: int = 45, users: int = 90, reset: bool = True) -> dict[str, int]:
+async def seed(days: int = 45, users: int = 40, reset: bool = True) -> dict[str, int]:
     """Populate the usage tables with plausible fictional data.
 
     Returns a stats dict so callers (CLI and the admin endpoint) can report
