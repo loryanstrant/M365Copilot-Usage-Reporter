@@ -70,18 +70,18 @@ export default function SettingsPage() {
   /** Refreshes both status cards. Returns the user-sync state so a caller
    *  polling a run it started can tell when that run has settled. */
   async function refreshStatus(): Promise<UserSyncStatus | null> {
-    try {
-      const [s, u] = await Promise.all([
-        api<StatusResult>("/admin/status"),
-        api<UserSyncStatus>("/admin/users/status"),
-      ]);
-      setStatus(s);
-      setUserSync(u);
-      return u;
-    } catch {
-      /* ignore transient status errors */
-      return null;
+    // Settled, not Promise.all: a failing users/status must not also throw away
+    // the Data status card's counts, which worked off one call before this.
+    const [s, u] = await Promise.allSettled([
+      api<StatusResult>("/admin/status"),
+      api<UserSyncStatus>("/admin/users/status"),
+    ]);
+    if (s.status === "fulfilled") setStatus(s.value);
+    if (u.status === "fulfilled") {
+      setUserSync(u.value);
+      return u.value;
     }
+    return null;
   }
 
   useEffect(() => {
