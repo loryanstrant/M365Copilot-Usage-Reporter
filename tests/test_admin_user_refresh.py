@@ -112,6 +112,27 @@ async def test_status_reports_counts_for_the_button(client, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_failure_is_visible_on_the_status_endpoint(client):
+    """The refresh answers "started" even when the sync then fails.
+
+    With no Graph credentials stored, ``sync_users`` raises immediately — and the
+    only place that is visible is ``/admin/users/status``, which is what the
+    Settings button polls to turn its banner into an error. If this contract
+    changes, the UI goes back to claiming success while nothing happened.
+    """
+    headers = await _admin_headers(client)
+
+    r = await client.post("/admin/users/refresh", headers=headers)
+    assert r.json()["status"] == "started"
+
+    body = (await client.get("/admin/users/status", headers=headers)).json()
+    assert body["status"] == "failed"
+    assert body["detail"] == "Graph is not configured yet."
+    assert body["running"] is False
+    assert body["updated_at"] is not None
+
+
+@pytest.mark.asyncio
 async def test_lock_is_released_when_the_sync_fails(monkeypatch):
     """A failed extraction must not wedge the button permanently."""
 

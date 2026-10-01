@@ -67,7 +67,9 @@ export default function SettingsPage() {
     setAdminGroupId(cfg.admin_group_id ?? "");
   }
 
-  async function refreshStatus() {
+  /** Refreshes both status cards. Returns the user-sync state so a caller
+   *  polling a run it started can tell when that run has settled. */
+  async function refreshStatus(): Promise<UserSyncStatus | null> {
     try {
       const [s, u] = await Promise.all([
         api<StatusResult>("/admin/status"),
@@ -75,8 +77,10 @@ export default function SettingsPage() {
       ]);
       setStatus(s);
       setUserSync(u);
+      return u;
     } catch {
       /* ignore transient status errors */
+      return null;
     }
   }
 
@@ -189,14 +193,38 @@ export default function SettingsPage() {
   async function onRefreshUsers() {
     setSyncingUsers(true);
     setBanner(null);
+    // The run we are about to start is the one whose outcome we report, so
+    // remember where the previous one left off and only settle the banner once
+    // the server's timestamp has moved on from it.
+    const previous = userSync?.updated_at ?? null;
     try {
       const res = await api<IngestRunResult>("/admin/users/refresh", { method: "POST" });
       setBanner({ kind: "info", text: res.detail });
       await refreshStatus();
+      if (res.status === "already_running") return;
       let ticks = 0;
       const timer = setInterval(async () => {
         ticks += 1;
-        await refreshStatus();
+        const u = await refreshStatus();
+        // The endpoint answers "started" even when the sync then fails — Graph
+        // unconfigured, a Graph permission missing — and the only place that
+        // failure surfaces is here. Without this the admin gets a cheerful
+        // "extracting in the background" and never learns it did nothing.
+        if (u && u.updated_at !== previous) {
+          if (u.status === "failed") {
+            clearInterval(timer);
+            setBanner({
+              kind: "error",
+              text: u.detail ?? "The user refresh failed. Check the container logs.",
+            });
+          } else if (u.status === "completed") {
+            clearInterval(timer);
+            setBanner({
+              kind: "ok",
+              text: `Users refreshed — ${u.licensed_users.toLocaleString()} licensed, ${u.directory_users.toLocaleString()} in the directory. Open Tenant users to see the list.`,
+            });
+          }
+        }
         if (ticks >= 20) clearInterval(timer);
       }, 3000);
     } catch (err) {
