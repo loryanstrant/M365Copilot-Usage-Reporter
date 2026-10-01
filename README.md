@@ -115,6 +115,9 @@ Paste **Tenant ID**, **Client ID**, **Client secret**, then **Test connection**.
 **4. Load data.** Select **Run now** for the last 24 hours, or open **Backfill** to pull history
 (default 30 days). The **Data status** card on Settings shows Prompts / Conversations / **Licensed
 users** / Directory users; the **Backfill** page has a run history table with per-run stats.
+**Refresh user list**, beside Run now, re-reads only your directory and Copilot licence
+assignments — the quick fix when **Tenant users** looks out of date and the next scheduled
+refresh is hours away.
 
 Want to look around before connecting a tenant? **Settings → Demo data → Load demo data** fills the
 dashboards with plausible fictional data. Clear it again from the same card before your first live

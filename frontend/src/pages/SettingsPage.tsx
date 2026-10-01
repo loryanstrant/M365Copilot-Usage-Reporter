@@ -8,6 +8,7 @@ import type {
   IngestRunResult,
   StatusResult,
   TestConnectionResult,
+  UserSyncStatus,
 } from "../api/types";
 
 
@@ -38,9 +39,11 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [ingesting, setIngesting] = useState(false);
+  const [syncingUsers, setSyncingUsers] = useState(false);
   const [banner, setBanner] = useState<Banner | null>(null);
   const [test, setTest] = useState<TestConnectionResult | null>(null);
   const [status, setStatus] = useState<StatusResult | null>(null);
+  const [userSync, setUserSync] = useState<UserSyncStatus | null>(null);
 
   const [tenantId, setTenantId] = useState("");
   const [clientId, setClientId] = useState("");
@@ -64,12 +67,21 @@ export default function SettingsPage() {
     setAdminGroupId(cfg.admin_group_id ?? "");
   }
 
-  async function refreshStatus() {
-    try {
-      setStatus(await api<StatusResult>("/admin/status"));
-    } catch {
-      /* ignore transient status errors */
+  /** Refreshes both status cards. Returns the user-sync state so a caller
+   *  polling a run it started can tell when that run has settled. */
+  async function refreshStatus(): Promise<UserSyncStatus | null> {
+    // Settled, not Promise.all: a failing users/status must not also throw away
+    // the Data status card's counts, which worked off one call before this.
+    const [s, u] = await Promise.allSettled([
+      api<StatusResult>("/admin/status"),
+      api<UserSyncStatus>("/admin/users/status"),
+    ]);
+    if (s.status === "fulfilled") setStatus(s.value);
+    if (u.status === "fulfilled") {
+      setUserSync(u.value);
+      return u.value;
     }
+    return null;
   }
 
   useEffect(() => {
@@ -170,6 +182,58 @@ export default function SettingsPage() {
       });
     } finally {
       setIngesting(false);
+    }
+  }
+
+  // Sibling of "Run now": same start-then-poll shape, but only the directory and
+  // licence lists. `already_running` is a normal answer, not a failure — the
+  // endpoint returns it with a 200 and its own wording, so it shows as info.
+  // The one extra status read before the poll loop is so the button flips to
+  // "Running…" straight away rather than staying pressable for three seconds.
+  async function onRefreshUsers() {
+    setSyncingUsers(true);
+    setBanner(null);
+    // The run we are about to start is the one whose outcome we report, so
+    // remember where the previous one left off and only settle the banner once
+    // the server's timestamp has moved on from it.
+    const previous = userSync?.updated_at ?? null;
+    try {
+      const res = await api<IngestRunResult>("/admin/users/refresh", { method: "POST" });
+      setBanner({ kind: "info", text: res.detail });
+      await refreshStatus();
+      if (res.status === "already_running") return;
+      let ticks = 0;
+      const timer = setInterval(async () => {
+        ticks += 1;
+        const u = await refreshStatus();
+        // The endpoint answers "started" even when the sync then fails — Graph
+        // unconfigured, a Graph permission missing — and the only place that
+        // failure surfaces is here. Without this the admin gets a cheerful
+        // "extracting in the background" and never learns it did nothing.
+        if (u && u.updated_at !== previous) {
+          if (u.status === "failed") {
+            clearInterval(timer);
+            setBanner({
+              kind: "error",
+              text: u.detail ?? "The user refresh failed. Check the container logs.",
+            });
+          } else if (u.status === "completed") {
+            clearInterval(timer);
+            setBanner({
+              kind: "ok",
+              text: `Users refreshed — ${u.licensed_users.toLocaleString()} licensed, ${u.directory_users.toLocaleString()} in the directory. Open Tenant users to see the list.`,
+            });
+          }
+        }
+        if (ticks >= 20) clearInterval(timer);
+      }, 3000);
+    } catch (err) {
+      setBanner({
+        kind: "error",
+        text: err instanceof ApiError ? err.message : "User refresh failed to start",
+      });
+    } finally {
+      setSyncingUsers(false);
     }
   }
 
@@ -353,7 +417,25 @@ export default function SettingsPage() {
             >
               {ingesting ? "Starting…" : "Run now"}
             </button>
+            <button
+              type="button"
+              onClick={onRefreshUsers}
+              disabled={syncingUsers || (userSync?.running ?? false)}
+              className="rounded-lg border border-brand-300 bg-brand-50 px-4 py-2 text-sm font-semibold text-brand-700 hover:bg-brand-100 disabled:opacity-60 dark:border-brand-700 dark:bg-brand-900/20 dark:text-brand-400"
+            >
+              {syncingUsers
+                ? "Starting…"
+                : userSync?.running
+                  ? "Running…"
+                  : "Refresh user list"}
+            </button>
           </div>
+          <p className="text-xs text-slate-400 dark:text-slate-500">
+            <strong>Run now</strong> pulls usage data. <strong>Refresh user list</strong>{" "}
+            only re-reads your directory and Copilot licence assignments, without waiting
+            for the next scheduled refresh. Open <strong>Tenant users</strong> afterwards
+            to see the new list.
+          </p>
         </form>
 
         <div className="space-y-6">
