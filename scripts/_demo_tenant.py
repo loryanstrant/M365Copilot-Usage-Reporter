@@ -8,6 +8,16 @@ other. Before this existed, each seeder invented its own company (``demo.local``
 ``contoso.local``, ``avanoso.com``) and a viewer watching all four saw three
 unrelated fake tenants.
 
+Not every sibling uses all of it, and that is deliberate. ``COMPANY``, ``DOMAIN``
+and ``COUNTRY`` are the parts that must agree everywhere, because the company name
+and the email domain are what actually reach a screen. ``ROSTER`` is for seeders
+that would otherwise mash random first and last names together; a repo that has
+built its own tuned persona set — with a manager hierarchy, deliberate department
+sizes and per-person skill offsets — keeps it and imports only the company
+identity. Avanoso having different employees in different reports is what a
+1,500-person company looks like; Avanoso being called Contoso in one report is the
+thing this module exists to stop.
+
 Everything here is invented. ``avanoso.com`` is not a real domain and none of
 these people exist.
 """
