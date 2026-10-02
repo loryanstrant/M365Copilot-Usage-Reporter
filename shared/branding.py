@@ -38,6 +38,18 @@ from dataclasses import dataclass, field
 # 1-4 of 255 per channel but not byte-exactly, so the defaults live as literal
 # channel values in frontend/src/index.css and this copy exists so a test can
 # assert the two agree. See tests/test_branding_defaults_unchanged.py.
+#
+# PROVENANCE. These eleven values are the palette frontend/tailwind.config.js
+# carried before customer branding existed, copied verbatim from commit f30f7c9.
+# That matters because the test suite can only check this table against
+# index.css — both of which arrived in the same change — so the two agreeing
+# proves they are consistent, not that they are *right*. The check that they are
+# right is this one, and it is re-runnable:
+#
+#     git show <commit-before-branding>:frontend/tailwind.config.js \
+#       | grep -oE '[0-9]+: "#[0-9a-f]{6}"'
+#
+# Verified against that output on 2026-10-02: all eleven match.
 STOPS: tuple[int, ...] = (50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950)
 
 DEFAULT_RAMP_HEX: dict[int, str] = {

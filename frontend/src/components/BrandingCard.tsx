@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiError, api, upload } from "../api/client";
+import { ApiError, api, patch, upload } from "../api/client";
 import type { BrandingAdmin, RampPreview } from "../api/types";
 import { useBranding } from "../branding/BrandingContext";
 import { looksDark } from "../branding/logoLuminance";
@@ -146,19 +146,25 @@ export default function BrandingCard() {
   // the symptom would be the preview disagreeing with the saved result.
   useEffect(() => {
     if (!HEX.test(hex)) return;
+    // `cancelled` guards against an out-of-order response: debouncing stops us
+    // firing on every keystroke, but two requests can still be in flight and
+    // the slower one must not paint the preview the wrong colour.
+    let cancelled = false;
     const id = window.setTimeout(async () => {
       try {
-        setPreview(
-          await api<RampPreview>("/admin/branding/preview", {
-            method: "POST",
-            body: JSON.stringify({ brand_primary_hex: hex }),
-          }),
-        );
+        const next = await api<RampPreview>("/admin/branding/preview", {
+          method: "POST",
+          body: JSON.stringify({ brand_primary_hex: hex }),
+        });
+        if (!cancelled) setPreview(next);
       } catch {
         /* keep the last good preview */
       }
     }, 200);
-    return () => window.clearTimeout(id);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(id);
+    };
   }, [hex]);
 
   async function onSave() {
@@ -233,17 +239,23 @@ export default function BrandingCard() {
     setPlate(next);
     setPlateAuto(false);
     if (!cfg?.has_logo_light) return;
-    // The flag rides along with the image, so re-send the preference only.
+    // One boolean, one small request. This used to re-fetch the stored logo and
+    // POST it back, which sent a megabyte to change a checkbox and re-ran
+    // validation on bytes whose filename had lost its extension.
     try {
       const form = new FormData();
-      form.append("variant", "light");
       form.append("needs_light_plate", String(next));
-      const blob = await (await fetch(cfg.logo_light_url!)).blob();
-      form.append("file", blob, "logo");
-      setCfg(await upload<BrandingAdmin>("/admin/branding/logo", form));
+      setCfg(await patch<BrandingAdmin>("/admin/branding/logo/light/plate", form));
       await refresh();
-    } catch {
-      setBanner({ kind: "error", text: "Could not change the white panel setting." });
+    } catch (err) {
+      setBanner({
+        kind: "error",
+        text:
+          err instanceof ApiError
+            ? err.message
+            : "Could not change the white panel setting.",
+      });
+      setPlate(!next); // put the checkbox back where it was
     }
   }
 

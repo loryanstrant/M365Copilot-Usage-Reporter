@@ -80,3 +80,29 @@ export async function upload<T>(path: string, form: FormData): Promise<T> {
 
   return (await resp.json()) as T;
 }
+
+/** Multipart PATCH. Same reasoning as `upload` above — the browser must set the
+ *  multipart boundary itself. Used for small field updates that FastAPI reads
+ *  as Form(...) rather than a JSON body. */
+export async function patch<T>(path: string, form: FormData): Promise<T> {
+  const headers = new Headers();
+  const token = getToken();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+
+  const resp = await fetch(path, { method: "PATCH", body: form, headers });
+
+  if (!resp.ok) {
+    let detail = resp.statusText;
+    try {
+      const body = await resp.json();
+      if (body?.detail) {
+        detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+      }
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new ApiError(resp.status, detail);
+  }
+
+  return (await resp.json()) as T;
+}

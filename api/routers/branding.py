@@ -163,7 +163,10 @@ def _validate_image(filename: str, content: bytes) -> tuple[bytes, str]:
     if content.startswith(_JPEG_MAGIC):
         return content, "image/jpeg"
 
-    looks_like_svg = filename.lower().endswith(".svg") or b"<svg" in content[:1024]
+    # Search the whole file, not a leading window: exporters emit long
+    # <?xml?> declarations, licence comments and metadata blocks before the
+    # root tag, and the upload is capped at 1 MB so the scan is cheap.
+    looks_like_svg = filename.lower().endswith(".svg") or b"<svg" in content
     if looks_like_svg:
         try:
             return sanitise_svg(content), "image/svg+xml"
@@ -299,6 +302,34 @@ async def upload_logo(
     asset.needs_light_plate = bool(needs_light_plate)
     asset.updated_by = user.username
 
+    await session.commit()
+    return _to_out(
+        await _get_config(session), await _get_assets(session), admin=True
+    )
+
+
+@admin_router.patch("/logo/{variant}/plate", response_model=BrandingAdminOut)
+async def set_logo_plate(
+    variant: str,
+    needs_light_plate: bool = Form(...),
+    session: AsyncSession = Depends(get_session),
+) -> BrandingOut:
+    """Toggle the white panel without touching the image.
+
+    The client used to re-fetch the stored logo and POST it back just to change
+    this one flag — a megabyte round trip that also put the bytes through
+    validation a second time under a filename with no extension, which could
+    reject a logo that had uploaded perfectly well minutes earlier.
+    """
+    _check_variant(variant)
+    asset = (
+        await session.execute(
+            select(BrandingAsset).where(BrandingAsset.variant == variant)
+        )
+    ).scalar_one_or_none()
+    if asset is None:
+        raise HTTPException(http_status.HTTP_404_NOT_FOUND, "No logo has been set.")
+    asset.needs_light_plate = bool(needs_light_plate)
     await session.commit()
     return _to_out(
         await _get_config(session), await _get_assets(session), admin=True

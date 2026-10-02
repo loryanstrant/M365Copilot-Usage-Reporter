@@ -351,3 +351,69 @@ def test_app_config_carries_no_image_bytes():
     names = {c.name for c in Cfg.__table__.columns}
     assert "content" not in names
     assert not any(c.type.__class__.__name__ == "LargeBinary" for c in Cfg.__table__.columns)
+
+
+# --- the white-panel flag -------------------------------------------------
+@pytest.mark.asyncio
+async def test_the_plate_flag_has_its_own_endpoint(client):
+    """Toggling a checkbox must not re-upload the image.
+
+    The client used to re-fetch the stored logo and POST it back to change this
+    one boolean, which sent a megabyte over the wire and — worse — re-ran
+    validation on bytes whose filename had lost its extension, so a logo that
+    uploaded fine could be rejected on a checkbox click.
+    """
+    headers = await _admin_headers(client)
+    await client.post("/admin/branding/logo", **_upload(PNG, "l.png"), headers=headers)
+
+    on = await client.patch(
+        "/admin/branding/logo/light/plate",
+        data={"needs_light_plate": "true"},
+        headers=headers,
+    )
+    assert on.status_code == 200
+    assert on.json()["logo_light_needs_plate"] is True
+
+    off = await client.patch(
+        "/admin/branding/logo/light/plate",
+        data={"needs_light_plate": "false"},
+        headers=headers,
+    )
+    assert off.json()["logo_light_needs_plate"] is False
+    # The image itself is untouched: same bytes, same URL.
+    assert off.json()["logo_light_url"] == on.json()["logo_light_url"]
+    assert (await client.get("/auth/branding/logo/light")).content == PNG
+
+
+@pytest.mark.asyncio
+async def test_the_plate_endpoint_404s_with_no_logo(client):
+    headers = await _admin_headers(client)
+    r = await client.patch(
+        "/admin/branding/logo/light/plate",
+        data={"needs_light_plate": "true"},
+        headers=headers,
+    )
+    assert r.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_an_svg_with_a_long_preamble_is_still_recognised(client):
+    """Exporters put licence comments and metadata before the root tag.
+
+    The content sniff used to look only at the first 1024 bytes, so a file whose
+    <svg> appeared after a long comment was refused unless its filename carried
+    the extension.
+    """
+    headers = await _admin_headers(client)
+    padded = (
+        b'<?xml version="1.0"?>\n<!-- ' + b"x" * 1200 + b" -->\n"
+        b'<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0"/></svg>'
+    )
+    r = await client.post(
+        "/admin/branding/logo",
+        files={"file": ("logo", padded, "application/octet-stream")},
+        data={"variant": "light"},
+        headers=headers,
+    )
+    assert r.status_code == 200, r.text
+    assert b"M0 0" in (await client.get("/auth/branding/logo/light")).content

@@ -91,7 +91,12 @@ def test_external_href_is_stripped() -> None:
     assert b"evil.example" not in out
 
 
-def test_style_element_is_dropped() -> None:
+def test_a_style_element_keeps_its_rules_but_loses_its_fetches() -> None:
+    """The element is kept; only what it could fetch is removed.
+
+    It used to be deleted outright, which was worse than the risk — see
+    test_an_internal_css_export_keeps_its_colours.
+    """
     svg = (
         b'<svg xmlns="http://www.w3.org/2000/svg">'
         b"<style>@import url(https://evil.example/x.css);</style>"
@@ -187,3 +192,92 @@ def test_the_shipped_sample_logos_survive_sanitising() -> None:
         out = sanitise_svg((sample_dir / name).read_bytes()).decode()
         assert "avanos" in out
         assert "<path" in out
+
+
+# --- <style> blocks ------------------------------------------------------
+# Dropping the element outright used to pass validation and then serve the
+# customer a black logo, because the class names on the shapes survived and the
+# rules that coloured them did not. Illustrator's "Internal CSS" export and
+# several Figma paths produce exactly this shape, so it is the common case, not
+# an exotic one.
+ILLUSTRATOR_INTERNAL_CSS = (
+    b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10">'
+    b"<defs><style>.cls-1{fill:#ff5800}</style></defs>"
+    b'<path class="cls-1" d="M0 0 L10 10"/></svg>'
+)
+
+
+def test_an_internal_css_export_keeps_its_colours() -> None:
+    out = sanitise_svg(ILLUSTRATOR_INTERNAL_CSS).decode()
+    assert "cls-1" in out, "the class on the shape survived"
+    assert "#ff5800" in out, "but the rule that colours it did not — logo renders black"
+
+
+def test_style_block_loses_imports_and_external_urls() -> None:
+    svg = (
+        b'<svg xmlns="http://www.w3.org/2000/svg"><style>'
+        b"@import url(https://evil.example/x.css);"
+        b".a{fill:#fff;background:url(http://evil.example/y.png)}"
+        b".b{fill:url(#grad1)}"
+        b'</style><path class="a" d="M0 0"/></svg>'
+    )
+    out = sanitise_svg(svg).decode()
+    assert "evil.example" not in out
+    assert "@import" not in out
+    assert "url(#grad1)" in out, "a same-document reference must survive"
+    assert "#fff" in out, "ordinary declarations must survive"
+
+
+@pytest.mark.parametrize(
+    "css",
+    [
+        b".a{background:url(javascript:alert(1))}",
+        b".a{width:expression(alert(1))}",
+        b".a{-moz-binding:url(#x)}",
+        b".a{behavior:url(#default#time2)}",
+    ],
+)
+def test_hostile_css_is_refused_not_quietly_rewritten(css: bytes) -> None:
+    """Checked against the ORIGINAL text.
+
+    Scrubbing first would turn `url(javascript:...)` into `none` and accept the
+    file — safe by accident, but an admin who uploaded a scripted file should be
+    told rather than served something subtly different.
+    """
+    svg = b'<svg xmlns="http://www.w3.org/2000/svg"><style>' + css + b"</style></svg>"
+    with pytest.raises(UnsafeSvgError):
+        sanitise_svg(svg)
+
+
+# --- namespace -----------------------------------------------------------
+def test_a_namespaceless_svg_gets_its_namespace_back() -> None:
+    """Valid inline in HTML, which auto-namespaces; broken served standalone."""
+    out = sanitise_svg(
+        b'<svg viewBox="0 0 10 10"><path d="M0 0" fill="#ff5800"/></svg>'
+    ).decode()
+    assert "http://www.w3.org/2000/svg" in out
+    assert "M0 0" in out
+
+
+# --- URL schemes ---------------------------------------------------------
+@pytest.mark.parametrize(
+    "attr",
+    [
+        b'filter="url(//evil.example/f)"',       # protocol-relative
+        b'fill="url(https://evil.example/g)"',
+        b'mask="url(http://evil.example/m)"',
+    ],
+)
+def test_external_references_in_any_attribute_are_stripped(attr: bytes) -> None:
+    svg = (
+        b'<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0" ' + attr + b"/></svg>"
+    )
+    assert b"evil.example" not in sanitise_svg(svg)
+
+
+def test_a_utf8_bom_does_not_break_a_valid_svg() -> None:
+    """Windows editors emit one; it must not look like a corrupt file."""
+    svg = b"\xef\xbb\xbf" + (
+        b'<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0 L1 1"/></svg>'
+    )
+    assert b"M0 0 L1 1" in sanitise_svg(svg)

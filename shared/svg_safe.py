@@ -31,6 +31,14 @@ ALLOWED_TAGS: frozenset[str] = frozenset(
         "text", "tspan", "textPath",
         "linearGradient", "radialGradient", "stop",
         "clipPath", "mask", "pattern", "metadata",
+        # <style> is allowed but its CONTENTS are rewritten — see
+        # _clean_style_text. Dropping the element outright (the previous
+        # behaviour) was worse than the risk it avoided: Illustrator's
+        # "Internal CSS" export and several Figma paths emit
+        # <style>.cls-1{fill:#2f5ae0}</style> plus <path class="cls-1">, so
+        # removing the rule while keeping the class silently repainted the
+        # customer's logo black with no error anywhere.
+        "style",
     }
 )
 
@@ -45,13 +53,22 @@ FORBIDDEN_TAGS: frozenset[str] = frozenset(
     }
 )
 
-# `style` is excluded from ALLOWED_TAGS on purpose: a <style> child can carry
-# @import and url(), which reach the network from inside a "static" image.
 
 _ENTITY_RE = re.compile(r"<!ENTITY", re.I)
 _DOCTYPE_RE = re.compile(r"<!DOCTYPE[^>\[]*>", re.I)
 _DOCTYPE_SUBSET_RE = re.compile(r"<!DOCTYPE[^>]*\[", re.I)
-_URL_SCHEMES_RE = re.compile(r"javascript:|data:text/html|url\(\s*['\"]?https?:", re.I)
+# Anything that could reach the network or carry markup. Protocol-relative
+# `url(//host/x)` is included: it is a real external fetch that an earlier
+# version of this pattern missed.
+_URL_SCHEMES_RE = re.compile(
+    r"javascript:|vbscript:|data:(?!image/(png|jpeg|gif|webp);base64,)"
+    r"|url\(\s*['\"]?(?:https?:|//)",
+    re.I,
+)
+# CSS inside a <style> block. Fetches and the ancient IE/Gecko script hooks.
+_CSS_IMPORT_RE = re.compile(r"@import[^;}]*;?", re.I)
+_CSS_URL_RE = re.compile(r"url\(\s*(['\"]?)(?!#)[^)]*\1\s*\)", re.I)
+_CSS_HOSTILE_RE = re.compile(r"javascript:|expression\(|behaviou?r\s*:|-moz-binding", re.I)
 
 
 class UnsafeSvgError(ValueError):
@@ -61,6 +78,27 @@ class UnsafeSvgError(ValueError):
 def _local(tag: str) -> str:
     """Strip the namespace: ``{http://...}path`` -> ``path``."""
     return tag.rsplit("}", 1)[-1] if "}" in tag else tag
+
+
+def _clean_style_text(css: str) -> str:
+    """Strip everything from a <style> block that could reach the network.
+
+    What survives is declarations — ``.cls-1{fill:#ff5800}`` — which is the only
+    reason the element is allowed at all. What goes: ``@import`` at-rules, every
+    ``url(...)`` that is not a same-document ``#fragment``, and the ancient
+    IE/Gecko script hooks. A block still carrying something hostile after that
+    is refused rather than served half-scrubbed.
+    """
+    # Check the ORIGINAL text first. Scrubbing before checking would let
+    # `url(javascript:...)` be quietly rewritten to `none` and accepted — safe
+    # by accident, but an admin who uploaded a scripted file should be told.
+    if _CSS_HOSTILE_RE.search(css):
+        raise UnsafeSvgError("style")
+    cleaned = _CSS_IMPORT_RE.sub("", css)
+    cleaned = _CSS_URL_RE.sub("none", cleaned)
+    if _CSS_HOSTILE_RE.search(cleaned):
+        raise UnsafeSvgError("style")
+    return cleaned
 
 
 def _clean_attributes(element: ET.Element) -> None:
@@ -100,6 +138,12 @@ def _walk(parent: ET.Element) -> None:
             parent.remove(child)
             continue
         _clean_attributes(child)
+        if local == "style":
+            # Rewrite the CSS rather than drop the element: the class names on
+            # the shapes refer to it, so removing it repaints the logo.
+            child.text = _clean_style_text(child.text or "")
+            child.tail = child.tail
+            continue
         _walk(child)
 
 
@@ -144,7 +188,7 @@ def sanitise_svg(raw: bytes) -> bytes:
         _walk(root)
     except UnsafeSvgError as exc:
         offender = str(exc)
-        if offender in {"script", "handler"}:
+        if offender in {"script", "handler", "style"}:
             raise UnsafeSvgError(
                 "That SVG contains a script, which we can't accept. "
                 "Please export a plain SVG."
@@ -153,6 +197,13 @@ def sanitise_svg(raw: bytes) -> bytes:
             "That SVG contains something we can't display safely "
             f"(a <{offender}> element). Please export a plain SVG."
         ) from exc
+
+    # An SVG pasted inline into HTML is often written with no xmlns at all —
+    # valid there, because HTML auto-namespaces foreign content. Served
+    # standalone as image/svg+xml it would not render, so put the namespace
+    # back rather than handing the admin a silently broken image.
+    if "}" not in root.tag:
+        root.set("xmlns", SVG_NS)
 
     ET.register_namespace("", SVG_NS)
     return ET.tostring(root, encoding="utf-8", xml_declaration=False)
