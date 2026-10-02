@@ -15,6 +15,7 @@ from sqlalchemy import (
     Date,
     DateTime,
     Integer,
+    LargeBinary,
     String,
     Text,
     func,
@@ -148,6 +149,44 @@ class AppConfig(Base):
     # Friendly schedule: run the incremental ingest every N hours (1..24).
     # 24 = once a day. Replaces the cron field for non-technical admins.
     schedule_interval_hours: Mapped[int] = mapped_column(Integer, default=24)
+    # --- customer branding (docs/specs/customer-branding.md) ---
+    # Shown beside the product's own marks, never instead of them.
+    org_display_name: Mapped[str | None] = mapped_column(Text)
+    # One seed colour, normalised "#rrggbb". The eleven-stop light and dark
+    # ramps are derived from it on read (shared.branding) and never stored, so
+    # there is one place a colour decision lives.
+    brand_primary_hex: Mapped[str | None] = mapped_column(Text)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    updated_by: Mapped[str | None] = mapped_column(Text)
+
+
+class BrandingAsset(Base):
+    """An uploaded customer logo.
+
+    Deliberately NOT columns on ``app_config``. That row is read via
+    ``session.get(AppConfig, 1)`` on nearly every request — including the
+    public, pre-sign-in ``GET /auth/config`` — and ``session.get()`` loads every
+    column, so two 1 MB images there would turn the hottest read in the app into
+    a 2 MB one. A separate table also makes "remove the dark logo" a single
+    DELETE instead of three column-nullings that have to stay consistent.
+    """
+
+    __tablename__ = "branding_asset"
+
+    # "light" | "dark" — the background the logo is meant to sit on.
+    variant: Mapped[str] = mapped_column(Text, primary_key=True)
+    mime: Mapped[str] = mapped_column(Text)
+    content: Mapped[bytes] = mapped_column(LargeBinary)
+    # First 16 hex chars of sha256(sanitised bytes). Serves as the ETag and as
+    # the ?v= cache-buster, so replacing a logo changes its URL and the browser
+    # fetches the new one instead of showing the old one indefinitely.
+    etag: Mapped[str] = mapped_column(Text)
+    byte_size: Mapped[int] = mapped_column(Integer, default=0)
+    # Admin preference, pre-ticked when the browser measures the logo as dark:
+    # render it on a soft white plate when it sits on a dark background.
+    needs_light_plate: Mapped[bool] = mapped_column(Boolean, default=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

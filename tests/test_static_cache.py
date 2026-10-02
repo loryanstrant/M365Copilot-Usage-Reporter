@@ -80,3 +80,29 @@ async def test_unhashed_root_files_revalidate(client):
     r = await client.get("/favicon.png")
     assert r.status_code == 200
     assert r.headers.get("cache-control") == "no-cache"
+
+
+@pytest.mark.asyncio
+async def test_branding_routes_are_not_shadowed_by_the_spa_fallback(client):
+    """The branding API must win against the catch-all, with a bundle mounted.
+
+    This is the one worth having. A branding router registered on the wrong
+    side of ``_mount_frontend()`` returns ``index.html`` with a **200**, so
+    every curl looks fine, every health check passes, and the only symptom is
+    the SPA receiving HTML where it expected JSON and a logo that renders as a
+    broken image. Registering it before the mount is the fix; this is the
+    assertion that notices if that ever gets reordered.
+    """
+    r = await client.get("/auth/branding")
+    assert r.status_code == 200
+    assert r.headers["content-type"].startswith("application/json")
+    assert "<!doctype" not in r.text.lower()
+    assert "brand_primary_hex" in r.json()
+
+
+@pytest.mark.asyncio
+async def test_a_missing_logo_is_a_404_not_the_spa_shell(client):
+    """Same trap, the path most likely to be hit by an <img> tag."""
+    r = await client.get("/auth/branding/logo/light")
+    assert r.status_code == 404
+    assert "<!doctype" not in r.text.lower()
