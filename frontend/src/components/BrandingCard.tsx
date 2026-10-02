@@ -3,16 +3,52 @@ import { ApiError, api, upload } from "../api/client";
 import type { BrandingAdmin, RampPreview } from "../api/types";
 import { useBranding } from "../branding/BrandingContext";
 import { looksDark } from "../branding/logoLuminance";
-import { Field, bannerClass } from "../pages/SettingsPage";
 
 // Settings -> "Your organisation's branding". Extracted rather than added to
-// SettingsPage.tsx, which is already ~580 lines, following the existing
+// the settings page, which is already ~580 lines, following the existing
 // DemoDataCard / SetupWizard pattern.
+//
+// `Field` and `bannerClass` are re-declared here rather than imported from the
+// settings page. They match that page's markup exactly, but this file is
+// committed byte-identical to all four sibling solutions and their settings
+// pages differ — Agent Quality's is AdminPage.tsx and its `Field` renders its
+// own input, so an import would only work in three of the four. A component
+// importing from a page is the wrong direction anyway.
 
 const MAX_BYTES = 1024 * 1024;
 const MAX_PIXELS = 4000;
 const ACCEPT = "image/png,image/jpeg,image/svg+xml";
 const HEX = /^#?[0-9a-fA-F]{6}$/;
+
+/** Same markup as the settings page's own label/hint pair. */
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
+        {label}
+      </label>
+      {children}
+      {hint && <p className="mt-1 text-xs text-slate-400 dark:text-slate-500">{hint}</p>}
+    </div>
+  );
+}
+
+/** Same three banner treatments the settings page uses. */
+function bannerClass(kind: "ok" | "error" | "info"): string {
+  return {
+    ok: "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400",
+    error: "bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400",
+    info: "bg-brand-50 text-brand-700 dark:bg-brand-900/20 dark:text-brand-400",
+  }[kind];
+}
 
 type Slot = "light" | "dark";
 

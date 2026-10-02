@@ -27,7 +27,7 @@ interface Banner {
   text: string;
 }
 
-export function bannerClass(kind: Banner["kind"]): string {
+function bannerClass(kind: Banner["kind"]): string {
   return {
     ok: "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400",
     error: "bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400",
@@ -545,7 +545,7 @@ export default function SettingsPage() {
   );
 }
 
-export function Field({
+function Field({
   label,
   hint,
   children,
