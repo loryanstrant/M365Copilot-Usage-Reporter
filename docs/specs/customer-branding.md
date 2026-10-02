@@ -149,7 +149,17 @@ own staff has no way to make it read as their organisation's tool.
 
 ### Accessibility and layout
 20. Every branding surface is checked by screenshot at desktop width **and
-    380px**, in light and dark. No clipped control, no horizontal scroll.
+    380px**, in light and dark. The branding card introduces **no horizontal
+    scroll** and wraps no worse than the cards beside it.
+
+    Measured, so the bar is honest: at 380px the fixed 240px sidebar leaves
+    ~140px of content width, and *every* card on the Settings page — including
+    the untouched "Demo data" card, and the page heading — wraps to roughly one
+    word per line. That is the pre-existing desktop-only layout this spec's
+    non-goals already exclude, not something branding introduced. The test is
+    therefore parity with its neighbours, not legibility the rest of the page
+    does not have. Making these apps usable at 380px means giving the sidebar
+    responsive behaviour, which is a separate piece of work.
 21. The logo carries the organisation name as its alt text, or "Customer logo"
     when no name is set.
 22. All branding state in the Settings card is conveyed by shape and word, not

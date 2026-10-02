@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
+import BrandingCard from "../components/BrandingCard";
 import { api, ApiError } from "../api/client";
 import SetupWizard from "../components/SetupWizard";
 import DemoDataCard from "../components/DemoDataCard";
@@ -26,7 +27,7 @@ interface Banner {
   text: string;
 }
 
-function bannerClass(kind: Banner["kind"]): string {
+export function bannerClass(kind: Banner["kind"]): string {
   return {
     ok: "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400",
     error: "bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400",
@@ -535,11 +536,16 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+
+      {/* Branding last: the Graph connection and the schedule are what an admin
+          must do, this is what they want to do. Above the connection card it
+          would invite a half-configured install with a lovely logo. */}
+      <BrandingCard />
     </div>
   );
 }
 
-function Field({
+export function Field({
   label,
   hint,
   children,

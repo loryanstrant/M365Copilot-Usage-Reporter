@@ -367,3 +367,41 @@ export interface DirectoryUser {
   has_copilot_license: boolean;
   prompts: number;
 }
+
+/** Customer branding (docs/specs/customer-branding.md).
+ *
+ *  Ramps are keyed by stop number AS A STRING. JSON object keys are strings;
+ *  `Record<number, string>` type-checks here and then indexes wrong at runtime. */
+export interface Branding {
+  org_display_name: string | null;
+  brand_primary_hex: string | null;
+  ramp_light: Record<string, string>;
+  ramp_dark: Record<string, string>;
+  /** True when we brightened the dark accent to reach 4.5:1. Told to the admin. */
+  dark_accent_lifted: boolean;
+  dark_accent_contrast: number | null;
+  /** White text on the sign-in gradient would fail AA, so use deeper stops. */
+  gradient_needs_deepening: boolean;
+  has_logo_light: boolean;
+  has_logo_dark: boolean;
+  logo_light_url: string | null;
+  logo_dark_url: string | null;
+  /** Render the light logo on a white panel when it sits on a dark surface. */
+  logo_light_needs_plate: boolean;
+}
+
+export interface BrandingAdmin extends Branding {
+  logo_light_bytes: number | null;
+  logo_dark_bytes: number | null;
+  updated_at: string | null;
+  updated_by: string | null;
+}
+
+export interface RampPreview {
+  ramp_light: Record<string, string>;
+  ramp_dark: Record<string, string>;
+  light_accent_contrast: number;
+  dark_accent_contrast: number;
+  dark_accent_lifted: boolean;
+  gradient_needs_deepening: boolean;
+}

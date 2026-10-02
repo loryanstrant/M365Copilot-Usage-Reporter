@@ -50,3 +50,33 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   if (resp.status === 204) return undefined as T;
   return (await resp.json()) as T;
 }
+
+/**
+ * Multipart upload (currently only the branding logo).
+ *
+ * Deliberately does NOT set Content-Type: the browser has to generate the
+ * multipart boundary itself, and setting the header by hand produces a body
+ * the server cannot parse. Everything else matches `api` above.
+ */
+export async function upload<T>(path: string, form: FormData): Promise<T> {
+  const headers = new Headers();
+  const token = getToken();
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+
+  const resp = await fetch(path, { method: "POST", body: form, headers });
+
+  if (!resp.ok) {
+    let detail = resp.statusText;
+    try {
+      const body = await resp.json();
+      if (body?.detail) {
+        detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+      }
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new ApiError(resp.status, detail);
+  }
+
+  return (await resp.json()) as T;
+}

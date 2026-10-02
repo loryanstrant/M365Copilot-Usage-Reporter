@@ -1,5 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useAuth } from "../auth/AuthContext";
+import CustomerLogo, { useHasCustomerBranding } from "../components/CustomerLogo";
+import { useBranding } from "../branding/BrandingContext";
 import { ApiError, api } from "../api/client";
 import { buildStamp } from "../lib/buildStamp";
 
@@ -11,6 +13,8 @@ export default function LoginPage() {
   const [busy, setBusy] = useState(false);
   const [entraEnabled, setEntraEnabled] = useState(false);
   const [build, setBuild] = useState("");
+  const { branding } = useBranding();
+  const hasCustomerBranding = useHasCustomerBranding();
 
   // Show the Microsoft sign-in button only once an Entra app registration has
   // been saved in Settings. This works on any host — it asks our own API, not
@@ -47,7 +51,15 @@ export default function LoginPage() {
   return (
     <div className="flex h-full w-full">
       {/* Brand panel */}
-      <div className="relative hidden w-1/2 flex-col justify-between overflow-hidden bg-gradient-to-br from-brand-700 via-brand-600 to-brand-500 p-12 text-white lg:flex">
+      <div className={`relative hidden w-1/2 flex-col justify-between overflow-hidden bg-gradient-to-br p-12 text-white lg:flex ${
+          // White heading text sits on this gradient and its lightest point is
+          // the end stop. For a bright brand colour that falls under 4.5:1, so
+          // the server tells us to use deeper stops instead. (The product's own
+          // blue measures 4.46:1 here, so this is not a hypothetical branch.)
+          branding.gradient_needs_deepening
+            ? "from-brand-800 via-brand-700 to-brand-600"
+            : "from-brand-700 via-brand-600 to-brand-500"
+        }`}>
         <div
           className="pointer-events-none absolute inset-0 opacity-20"
           style={{
@@ -62,6 +74,15 @@ export default function LoginPage() {
             className="h-11 w-11 object-contain drop-shadow"
           />
           <span className="text-lg font-semibold">M365 Copilot Usage Reporter</span>
+          {/* The customer's logo, at the far right behind a rule, so the row
+              reads "this product, for this organisation" rather than as two
+              marks competing for the same billing. */}
+          {hasCustomerBranding && (
+            <span className="ml-auto flex items-center gap-3">
+              <span className="h-8 w-px bg-white/30" aria-hidden />
+              <CustomerLogo placement="login-panel" />
+            </span>
+          )}
         </div>
         <div className="relative max-w-md">
           <h1 className="text-3xl font-semibold leading-tight">
@@ -81,6 +102,15 @@ export default function LoginPage() {
       <div className="flex w-full items-center justify-center px-6 lg:w-1/2">
         <form onSubmit={onSubmit} className="w-full max-w-sm">
           <div className="mb-8 flex flex-col items-center text-center lg:hidden">
+            {hasCustomerBranding && (
+              <>
+                <CustomerLogo placement="login-narrow" />
+                <span
+                  className="mb-4 mt-4 h-px w-16 bg-slate-200 dark:bg-slate-700"
+                  aria-hidden
+                />
+              </>
+            )}
             <img
               src="/app-logo.png"
               alt="Microsoft 365 Copilot"
