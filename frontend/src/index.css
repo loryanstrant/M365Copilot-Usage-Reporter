@@ -2,6 +2,50 @@
 @tailwind components;
 @tailwind utilities;
 
+/* The brand ramp, as space-separated sRGB channels so Tailwind's <alpha-value>
+   slot can produce rgb(... / 0.2) for utilities like bg-brand-900/20.
+
+   These two blocks ARE the product's default look: the eleven values in each
+   are the same hexes tailwind.config.js used to carry, so an install with no
+   customer branding renders exactly as it did before. Customer branding
+   overrides them from a <style id="cur-brand-ramp"> appended to <head>, which
+   wins on document order at equal specificity.
+
+   Keep the values as channel triples, never hexes — see the comment in
+   tailwind.config.js for what breaks. */
+:root {
+  --brand-50: 238 244 255;
+  --brand-100: 217 230 255;
+  --brand-200: 188 211 255;
+  --brand-300: 142 180 252;
+  --brand-400: 92 139 248;
+  --brand-500: 59 110 245;
+  --brand-600: 47 90 224;
+  --brand-700: 38 71 180;
+  --brand-800: 35 63 143;
+  --brand-900: 30 54 112;
+  --brand-950: 21 34 69;
+}
+
+/* Identical by default. Kept separate so a customer's dark ramp can differ:
+   call sites already pair stops per mode (text-brand-600 dark:text-brand-500),
+   so dark mode reaches for different stops of whichever ramp is in force.
+   Both selectors match <html> with equal specificity, so this block must stay
+   AFTER :root to win. */
+.dark {
+  --brand-50: 238 244 255;
+  --brand-100: 217 230 255;
+  --brand-200: 188 211 255;
+  --brand-300: 142 180 252;
+  --brand-400: 92 139 248;
+  --brand-500: 59 110 245;
+  --brand-600: 47 90 224;
+  --brand-700: 38 71 180;
+  --brand-800: 35 63 143;
+  --brand-900: 30 54 112;
+  --brand-950: 21 34 69;
+}
+
 html,
 body,
 #root {

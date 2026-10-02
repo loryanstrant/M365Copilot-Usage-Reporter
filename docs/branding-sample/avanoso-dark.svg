@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 72" width="360" height="72" role="img" aria-label="Avanoso">
+  <title>Avanoso</title>
+  <desc>Fictional customer brand used to test customer branding. Wordmark for dark backgrounds.</desc>
+  <!-- Mark: an open chevron ring, Avanade-orange, suggesting an "a". -->
+  <g transform="translate(8 12)">
+    <path d="M24 0 L48 48 L36.6 48 L24 22.8 L11.4 48 L0 48 Z" fill="#ff5800"/>
+    <rect x="14.4" y="30" width="19.2" height="8.4" fill="#ff5800"/>
+  </g>
+  <!-- Wordmark -->
+  <text x="74" y="49"
+        font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif"
+        font-size="40" font-weight="600" letter-spacing="-0.6"
+        fill="#ffffff">avanos<tspan fill="#ff5800">o</tspan></text>
+</svg>

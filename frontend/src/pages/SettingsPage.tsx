@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
+import BrandingCard from "../components/BrandingCard";
 import { api, ApiError } from "../api/client";
 import SetupWizard from "../components/SetupWizard";
 import DemoDataCard from "../components/DemoDataCard";
@@ -535,6 +536,11 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+
+      {/* Branding last: the Graph connection and the schedule are what an admin
+          must do, this is what they want to do. Above the connection card it
+          would invite a half-configured install with a lovely logo. */}
+      <BrandingCard />
     </div>
   );
 }
